@@ -8,7 +8,8 @@ import TelegramPresentationData
 
 private let largeButtonSize: CGFloat = 56.0
 
-final class ContestCallControllerButtonsNode: ASDisplayNode {
+final class ContestCallControllerButtonsNode: ASDisplayNode, CallControllerButtonsNodeProtocol {
+    
     private var buttonNodes: [ButtonDescription.Key: ContestCallButtonNode] = [:]
     private var mode: CallControllerButtonsMode?
     
@@ -21,9 +22,12 @@ final class ContestCallControllerButtonsNode: ASDisplayNode {
     var toggleVideo: (() -> Void)?
     var rotateCamera: (() -> Void)?
     
+    func videoButtonFrame() -> CGRect? {
+        return self.buttonNodes[.enableCamera]?.frame
+    }
+
     override init() {
         super.init()
-        backgroundColor = .gray.withAlphaComponent(0.5)
     }
 
     var strings: PresentationStrings?
@@ -77,7 +81,7 @@ final class ContestCallControllerButtonsNode: ASDisplayNode {
         
         let isCameraActive: Bool
         let isScreencastActive: Bool
-        let isCameraEnabled: Bool
+        var isCameraEnabled: Bool
         let isCameraInitializing: Bool
         if videoState.hasVideo {
             isCameraActive = videoState.isCameraActive
@@ -89,6 +93,13 @@ final class ContestCallControllerButtonsNode: ASDisplayNode {
             isScreencastActive = false
             isCameraEnabled = videoState.canChangeStatus
             isCameraInitializing = videoState.isInitializingCamera
+        }
+        
+        switch mode {
+        case .outgoingRinging, .incoming:
+            isCameraEnabled = false
+        case .active:
+            break
         }
             
         buttonsDescription.append(.enableCamera(isActive: isCameraActive || isScreencastActive, isEnabled: isCameraEnabled, isLoading: isCameraInitializing, isScreencast: isScreencastActive))
@@ -138,8 +149,8 @@ final class ContestCallControllerButtonsNode: ASDisplayNode {
             })
             self.buttonNodes.removeValue(forKey: key)
         }
-
-        return 16.0 + 4.0 + largeButtonSize
+        let textAndSpaceHeight: CGFloat = 20.0
+        return largeButtonSize + max(bottomInset + textAndSpaceHeight + 32.0, 46.0)
     }
     
     func makeButtonIfNeeded(for key: ButtonDescription.Key) -> ContestCallButtonNode {

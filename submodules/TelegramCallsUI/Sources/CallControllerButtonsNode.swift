@@ -223,7 +223,7 @@ func makeButtonContent(_ button: ButtonDescription, _ strings: PresentationStrin
     return (buttonContent, buttonText, buttonAccessibilityLabel, buttonAccessibilityValue, buttonAccessibilityTraits)
 }
 
-final class CallControllerButtonsNode: ASDisplayNode {
+final class CallControllerButtonsNode: ASDisplayNode, CallControllerButtonsNodeProtocol {
     private var buttonNodes: [ButtonDescription.Key: CallControllerButtonItemNode] = [:]
     
     private var mode: CallControllerButtonsMode?

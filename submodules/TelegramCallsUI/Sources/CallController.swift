@@ -137,9 +137,12 @@ public final class CallController: ViewController {
     override public func loadDisplayNode() {
         Logger.shared.logToConsole = true
 
-        if self.call.isVideoPossible {
-//            self.displayNode = CallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
-            self.displayNode = ContestCallContainerNode(presentationData: self.presentationData)
+        let useContestUI = self.call.isOutgoing
+        if useContestUI {
+            self.displayNode = ContestCallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
+            //            self.displayNode = ContestCallContainerNode(presentationData: self.presentationData)
+        } else if self.call.isVideoPossible {
+            self.displayNode = CallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
         } else {
             self.displayNode = LegacyCallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
         }
