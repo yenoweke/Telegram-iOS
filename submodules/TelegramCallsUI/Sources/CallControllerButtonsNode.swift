@@ -36,7 +36,7 @@ enum CallControllerButtonsMode: Equatable {
     case outgoingRinging(speakerMode: CallControllerButtonsSpeakerMode, hasAudioRouteMenu: Bool, videoState: VideoState)
 }
 
-private enum ButtonDescription: Equatable {
+enum ButtonDescription: Equatable {
     enum Key: Hashable {
         case accept
         case acceptOrEnd
@@ -61,6 +61,7 @@ private enum ButtonDescription: Equatable {
         case outgoing
         case decline
         case end
+        case cancel
     }
     
     case accept
@@ -90,6 +91,136 @@ private enum ButtonDescription: Equatable {
             return .mute
         }
     }
+}
+
+func makeButtonContent(_ button: ButtonDescription, _ strings: PresentationStrings, forContest: Bool = false) -> (CallControllerButtonItemNode.Content, String, String, String, UIAccessibilityTraits) {
+    
+    let buttonContent: CallControllerButtonItemNode.Content
+    let buttonText: String
+    var buttonAccessibilityLabel = ""
+    var buttonAccessibilityValue = ""
+    var buttonAccessibilityTraits: UIAccessibilityTraits = [.button]
+    
+    switch button {
+    case .accept:
+        buttonContent = CallControllerButtonItemNode.Content(
+            appearance: .color(.green),
+            image: .accept,
+            forContest: forContest
+        )
+        buttonText = strings.Call_Accept
+        buttonAccessibilityLabel = buttonText
+    case let .end(type):
+        switch type {
+        case .decline, .outgoing, .end:
+            buttonContent = CallControllerButtonItemNode.Content(
+                appearance: .color(.red),
+                image: .end,
+                forContest: forContest
+            )
+        case .cancel:
+            buttonContent = CallControllerButtonItemNode.Content(
+                appearance: .color(.lightRed),
+                image: .cancel(size: 20.0),
+                forContest: forContest
+            )
+        }
+        switch type {
+        case .outgoing:
+            buttonText = ""
+        case .decline:
+            buttonText = strings.Call_Decline
+        case .end, .cancel:
+            buttonText = strings.Call_End
+        }
+        if !buttonText.isEmpty {
+            buttonAccessibilityLabel = buttonText
+        } else {
+            buttonAccessibilityLabel = strings.Call_End
+        }
+    case let .enableCamera(isActivated, isEnabled, isInitializing, isScreencastActive):
+        buttonContent = CallControllerButtonItemNode.Content(
+            appearance: .blurred(isFilled: isActivated),
+            image: isScreencastActive ? .screencast : .camera,
+            forContest: forContest,
+            isEnabled: isEnabled,
+            hasProgress: isInitializing
+        )
+        buttonText = strings.Call_Camera
+        buttonAccessibilityLabel = buttonText
+        if !isEnabled {
+            buttonAccessibilityTraits.insert(.notEnabled)
+        }
+        if isActivated {
+            buttonAccessibilityTraits.insert(.selected)
+        }
+    case let .switchCamera(isEnabled):
+        buttonContent = CallControllerButtonItemNode.Content(
+            appearance: .blurred(isFilled: false),
+            image: .flipCamera,
+            forContest: forContest,
+            isEnabled: isEnabled
+        )
+        buttonText = strings.Call_Flip
+        buttonAccessibilityLabel = buttonText
+        if !isEnabled {
+            buttonAccessibilityTraits.insert(.notEnabled)
+        }
+    case let .soundOutput(value):
+        let image: CallControllerButtonItemNode.Content.Image
+        var isFilled = false
+        var title: String = strings.Call_Speaker
+        switch value {
+        case .builtin:
+            image = .speaker
+        case .speaker:
+            image = .speaker
+            isFilled = true
+        case .bluetooth:
+            image = .bluetooth
+            title = strings.Call_Audio
+            buttonAccessibilityValue = "Bluetooth"
+        case .airpods:
+            image = .airpods
+            title = strings.Call_Audio
+            buttonAccessibilityValue = "Airpods"
+        case .airpodsPro:
+            image = .airpodsPro
+            title = strings.Call_Audio
+            buttonAccessibilityValue = "Airpods Pro"
+        case .airpodsMax:
+            image = .airpodsMax
+            title = strings.Call_Audio
+            buttonAccessibilityValue = "Airpods Max"
+        case .headphones:
+            image = .headphones
+            title = strings.Call_Audio
+            buttonAccessibilityValue = strings.Call_AudioRouteHeadphones
+        }
+        buttonContent = CallControllerButtonItemNode.Content(
+            appearance: .blurred(isFilled: isFilled),
+            image: image,
+            forContest: forContest
+        )
+        buttonText = title
+        buttonAccessibilityLabel = buttonText
+        if isFilled {
+            buttonAccessibilityTraits.insert(.selected)
+        }
+    case let .mute(isMuted):
+        buttonContent = CallControllerButtonItemNode.Content(
+            appearance: .blurred(isFilled: isMuted),
+            image: .mute,
+            forContest: forContest
+        )
+        buttonText = strings.Call_Mute
+        buttonAccessibilityLabel = buttonText
+        if isMuted {
+            buttonAccessibilityTraits.insert(.selected)
+        }
+    }
+    
+    return (buttonContent, buttonText, buttonAccessibilityLabel, buttonAccessibilityValue, buttonAccessibilityTraits)
 }
 
 final class CallControllerButtonsNode: ASDisplayNode {
@@ -434,114 +565,9 @@ final class CallControllerButtonsNode: ASDisplayNode {
                 buttonTransition = .immediate
                 animateButtonIn = transition.isAnimated
             }
-            let buttonContent: CallControllerButtonItemNode.Content
-            let buttonText: String
-            var buttonAccessibilityLabel = ""
-            var buttonAccessibilityValue = ""
-            var buttonAccessibilityTraits: UIAccessibilityTraits = [.button]
-            switch button.button {
-            case .accept:
-                buttonContent = CallControllerButtonItemNode.Content(
-                    appearance: .color(.green),
-                    image: .accept
-                )
-                buttonText = strings.Call_Accept
-                buttonAccessibilityLabel = buttonText
-            case let .end(type):
-                buttonContent = CallControllerButtonItemNode.Content(
-                    appearance: .color(.red),
-                    image: .end
-                )
-                switch type {
-                case .outgoing:
-                    buttonText = ""
-                case .decline:
-                    buttonText = strings.Call_Decline
-                case .end:
-                    buttonText = strings.Call_End
-                }
-                if !buttonText.isEmpty {
-                    buttonAccessibilityLabel = buttonText
-                } else {
-                    buttonAccessibilityLabel = strings.Call_End
-                }
-            case let .enableCamera(isActivated, isEnabled, isInitializing, isScreencastActive):
-                buttonContent = CallControllerButtonItemNode.Content(
-                    appearance: .blurred(isFilled: isActivated),
-                    image: isScreencastActive ? .screencast : .camera,
-                    isEnabled: isEnabled,
-                    hasProgress: isInitializing
-                )
-                buttonText = strings.Call_Camera
-                buttonAccessibilityLabel = buttonText
-                if !isEnabled {
-                    buttonAccessibilityTraits.insert(.notEnabled)
-                }
-                if isActivated {
-                    buttonAccessibilityTraits.insert(.selected)
-                }
-            case let .switchCamera(isEnabled):
-                buttonContent = CallControllerButtonItemNode.Content(
-                    appearance: .blurred(isFilled: false),
-                    image: .flipCamera,
-                    isEnabled: isEnabled
-                )
-                buttonText = strings.Call_Flip
-                buttonAccessibilityLabel = buttonText
-                if !isEnabled {
-                    buttonAccessibilityTraits.insert(.notEnabled)
-                }
-            case let .soundOutput(value):
-                let image: CallControllerButtonItemNode.Content.Image
-                var isFilled = false
-                var title: String = strings.Call_Speaker
-                switch value {
-                case .builtin:
-                    image = .speaker
-                case .speaker:
-                    image = .speaker
-                    isFilled = true
-                case .bluetooth:
-                    image = .bluetooth
-                    title = strings.Call_Audio
-                    buttonAccessibilityValue = "Bluetooth"
-                case .airpods:
-                    image = .airpods
-                    title = strings.Call_Audio
-                    buttonAccessibilityValue = "Airpods"
-                case .airpodsPro:
-                    image = .airpodsPro
-                    title = strings.Call_Audio
-                    buttonAccessibilityValue = "Airpods Pro"
-                case .airpodsMax:
-                    image = .airpodsMax
-                    title = strings.Call_Audio
-                    buttonAccessibilityValue = "Airpods Max"
-                case .headphones:
-                    image = .headphones
-                    title = strings.Call_Audio
-                    buttonAccessibilityValue = strings.Call_AudioRouteHeadphones
-                }
-                buttonContent = CallControllerButtonItemNode.Content(
-                    appearance: .blurred(isFilled: isFilled),
-                    image: image
-                )
-                buttonText = title
-                buttonAccessibilityLabel = buttonText
-                if isFilled {
-                    buttonAccessibilityTraits.insert(.selected)
-                }
-            case let .mute(isMuted):
-                buttonContent = CallControllerButtonItemNode.Content(
-                    appearance: .blurred(isFilled: isMuted),
-                    image: .mute
-                )
-                buttonText = strings.Call_Mute
-                buttonAccessibilityLabel = buttonText
-                if isMuted {
-                    buttonAccessibilityTraits.insert(.selected)
-                }
-            }
+            
+            let (buttonContent, buttonText, buttonAccessibilityLabel, buttonAccessibilityValue, buttonAccessibilityTraits) = makeButtonContent(button.button, strings)
+            
             var buttonDelay = 0.0
             if animatePositionsWithDelay {
                 switch button.button.key {

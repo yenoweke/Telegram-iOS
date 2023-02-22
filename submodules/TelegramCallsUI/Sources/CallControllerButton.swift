@@ -9,10 +9,164 @@ import AnimationUI
 
 private let labelFont = Font.regular(13.0)
 
+func generateButtonContent(size: CGSize, content: CallControllerButtonItemNode.Content) -> UIImage? {
+    generateImage(size, contextGenerator: { size, context in
+        context.clear(CGRect(origin: CGPoint(), size: size))
+        
+        var ellipseRect = CGRect(origin: CGPoint(), size: size)
+        var fillColor: UIColor = .clear
+        let imageColor: UIColor = .white
+        var drawOverMask = false
+        context.setBlendMode(.normal)
+        let imageScale: CGFloat = 1.0
+        switch content.appearance {
+        case let .blurred(isFilled):
+            if content.hasProgress {
+                fillColor = .white
+                drawOverMask = true
+                context.setBlendMode(.copy)
+                ellipseRect = ellipseRect.insetBy(dx: 7.0, dy: 7.0)
+            } else {
+                if isFilled {
+                    fillColor = .white
+                    drawOverMask = true
+                    context.setBlendMode(.copy)
+                }
+            }
+        case let .color(color):
+            switch color {
+            case .lightRed:
+                fillColor = UIColor(rgb: 0xff3b30)
+            case .red:
+                fillColor = UIColor(rgb: 0xd92326)
+            case .green:
+                fillColor = UIColor(rgb: 0x74db58)
+            case let .custom(color, alpha):
+                fillColor = UIColor(rgb: color, alpha: alpha)
+            }
+        }
+        
+        context.setFillColor(fillColor.cgColor)
+        context.fillEllipse(in: ellipseRect)
+    
+        if let image = generateContentImage(contentImage: content.image, imageColor, forContest: content.forContest) {
+            context.translateBy(x: size.width / 2.0, y: size.height / 2.0)
+            context.scaleBy(x: imageScale, y: imageScale)
+            context.translateBy(x: -size.width / 2.0, y: -size.height / 2.0)
+            
+            let imageRect = CGRect(origin: CGPoint(x: floor((size.width - image.size.width) / 2.0), y: floor((size.height - image.size.height) / 2.0)), size: image.size)
+            if drawOverMask {
+                context.clip(to: imageRect, mask: image.cgImage!)
+                context.setBlendMode(.copy)
+                context.setFillColor(UIColor.clear.cgColor)
+                context.fill(CGRect(origin: CGPoint(), size: size))
+            } else {
+                context.draw(image.cgImage!, in: imageRect)
+            }
+        }
+    })
+    
+}
+
+func generateContentImage(contentImage: CallControllerButtonItemNode.Content.Image, _ imageColor: UIColor, forContest: Bool) -> UIImage? {
+    var image: UIImage?
+    switch contentImage {
+    case .cameraOff, .cameraOn:
+        image = nil
+    case .camera:
+        let imageName = forContest ? "Call/ContestCallCameraButton" : "Call/CallCameraButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .mute:
+        let imageName = forContest ? "Call/ContestCallMuteButton" : "Call/CallMuteButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .flipCamera:
+        let imageName = forContest ? "Call/ContestCallSwitchCameraButton" : "Call/CallSwitchCameraButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .bluetooth:
+        let imageName = forContest ? "Call/ContestCallBluetoothButton" : "Call/CallBluetoothButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .speaker:
+        let imageName = forContest ? "Call/ContestCallSpeakerButton" : "Call/CallSpeakerButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .airpods:
+        let imageName = forContest ? "Call/ContestCallAirpodsButton" : "Call/CallAirpodsButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .airpodsPro:
+        let imageName = forContest ? "Call/ContestCallAirpodsProButton" : "Call/CallAirpodsProButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .airpodsMax:
+        let imageName = forContest ? "Call/ContestCallAirpodsMaxButton" : "Call/CallAirpodsMaxButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
+    case .headphones:
+        image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallHeadphonesButton"), color: imageColor)
+    case .accept:
+        image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallAcceptButton"), color: imageColor)
+    case .end:
+        image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallDeclineButton"), color: imageColor)
+    case .cancel(let imageSize):
+        image = generateImage(CGSize(width: imageSize, height: imageSize), opaque: false, rotatedContext: { size, context in
+            let lineSize = imageSize - 2.0
+            let bounds = CGRect(origin: CGPoint(), size: size)
+            context.clear(bounds)
+            
+            context.setLineWidth(4.0 - UIScreenPixel)
+            context.setLineCap(.round)
+            context.setStrokeColor(imageColor.cgColor)
+            
+            context.move(to: CGPoint(x: 2.0 + UIScreenPixel, y: 2.0 + UIScreenPixel))
+            context.addLine(to: CGPoint(x: lineSize - UIScreenPixel, y: lineSize - UIScreenPixel))
+            context.strokePath()
+            
+            context.move(to: CGPoint(x: lineSize - UIScreenPixel, y: 2.0 + UIScreenPixel))
+            context.addLine(to: CGPoint(x: 2.0 + UIScreenPixel, y: lineSize - UIScreenPixel))
+            context.strokePath()
+        })
+    case .share:
+        image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallShareButton"), color: imageColor)
+    case .screencast:
+        if let iconImage = generateTintedImage(image: UIImage(bundleImageName: "Call/ScreenSharePhone"), color: imageColor) {
+            image = generateScaledImage(image: iconImage, size: iconImage.size.aspectFitted(CGSize(width: 38.0, height: 38.0)))
+        }
+    }
+    return image
+}
+
+func generateOverlayForButton(_ appearance: CallControllerButtonItemNode.Content.Appearance, size: CGFloat) -> UIImage? {
+    generateImage(CGSize(width: size, height: size), contextGenerator: { size, context in
+        context.clear(CGRect(origin: CGPoint(), size: size))
+        
+        let fillColor: UIColor
+        context.setBlendMode(.normal)
+        switch appearance {
+        case let .blurred(isFilled):
+            if isFilled {
+                fillColor = UIColor(white: 0.0, alpha: 0.1)
+            } else {
+                fillColor = UIColor(white: 1.0, alpha: 0.2)
+            }
+        case let .color(color):
+            switch color {
+            case .lightRed:
+                fillColor = UIColor(rgb: 0xff3b30).withMultipliedBrightnessBy(0.2).withAlphaComponent(0.2)
+            case .red:
+                fillColor = UIColor(rgb: 0xd92326).withMultipliedBrightnessBy(0.2).withAlphaComponent(0.2)
+            case .green:
+                fillColor = UIColor(rgb: 0x74db58).withMultipliedBrightnessBy(0.2).withAlphaComponent(0.2)
+            case let .custom(color, _):
+                fillColor = UIColor(rgb: color).withMultipliedBrightnessBy(0.2).withAlphaComponent(0.2)
+            }
+        }
+        
+        context.setFillColor(fillColor.cgColor)
+        context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
+    })
+}
+
 final class CallControllerButtonItemNode: HighlightTrackingButtonNode {
     struct Content: Equatable {
         enum Appearance: Equatable {
             enum Color: Equatable {
+                case lightRed
                 case red
                 case green
                 case custom(UInt32, CGFloat)
@@ -30,7 +184,7 @@ final class CallControllerButtonItemNode: HighlightTrackingButtonNode {
             }
         }
         
-        enum Image {
+        enum Image: Equatable {
             case cameraOff
             case cameraOn
             case camera
@@ -44,7 +198,7 @@ final class CallControllerButtonItemNode: HighlightTrackingButtonNode {
             case headphones
             case accept
             case end
-            case cancel
+            case cancel(size: CGFloat = 28.0)
             case share
             case screencast
         }
@@ -53,10 +207,12 @@ final class CallControllerButtonItemNode: HighlightTrackingButtonNode {
         var image: Image
         var isEnabled: Bool
         var hasProgress: Bool
+        var forContest: Bool
         
-        init(appearance: Appearance, image: Image, isEnabled: Bool = true, hasProgress: Bool = false) {
+        init(appearance: Appearance, image: Image, forContest: Bool = false, isEnabled: Bool = true, hasProgress: Bool = false) {
             self.appearance = appearance
             self.image = image
+            self.forContest = forContest
             self.isEnabled = isEnabled
             self.hasProgress = hasProgress
         }
@@ -217,111 +373,7 @@ final class CallControllerButtonItemNode: HighlightTrackingButtonNode {
                 }
             }
             
-            let contentImage = generateImage(CGSize(width: self.largeButtonSize, height: self.largeButtonSize), contextGenerator: { size, context in
-                context.clear(CGRect(origin: CGPoint(), size: size))
-                
-                var ellipseRect = CGRect(origin: CGPoint(), size: size)
-                var fillColor: UIColor = .clear
-                let imageColor: UIColor = .white
-                var drawOverMask = false
-                context.setBlendMode(.normal)
-                let imageScale: CGFloat = 1.0
-                switch content.appearance {
-                case let .blurred(isFilled):
-                    if content.hasProgress {
-                        fillColor = .white
-                        drawOverMask = true
-                        context.setBlendMode(.copy)
-                        ellipseRect = ellipseRect.insetBy(dx: 7.0, dy: 7.0)
-                    } else {
-                        if isFilled {
-                            fillColor = .white
-                            drawOverMask = true
-                            context.setBlendMode(.copy)
-                        }
-                    }
-                case let .color(color):
-                    switch color {
-                    case .red:
-                        fillColor = UIColor(rgb: 0xd92326)
-                    case .green:
-                        fillColor = UIColor(rgb: 0x74db58)
-                    case let .custom(color, alpha):
-                        fillColor = UIColor(rgb: color, alpha: alpha)
-                    }
-                }
-                
-                context.setFillColor(fillColor.cgColor)
-                context.fillEllipse(in: ellipseRect)
-                
-                var image: UIImage?
-                
-                switch content.image {
-                case .cameraOff, .cameraOn:
-                    image = nil
-                case .camera:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallCameraButton"), color: imageColor)
-                case .mute:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallMuteButton"), color: imageColor)
-                case .flipCamera:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallSwitchCameraButton"), color: imageColor)
-                case .bluetooth:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallBluetoothButton"), color: imageColor)
-                case .speaker:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallSpeakerButton"), color: imageColor)
-                case .airpods:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallAirpodsButton"), color: imageColor)
-                case .airpodsPro:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallAirpodsProButton"), color: imageColor)
-                case .airpodsMax:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallAirpodsMaxButton"), color: imageColor)
-                case .headphones:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallHeadphonesButton"), color: imageColor)
-                case .accept:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallAcceptButton"), color: imageColor)
-                case .end:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallDeclineButton"), color: imageColor)
-                case .cancel:
-                    image = generateImage(CGSize(width: 28.0, height: 28.0), opaque: false, rotatedContext: { size, context in
-                        let bounds = CGRect(origin: CGPoint(), size: size)
-                        context.clear(bounds)
-                        
-                        context.setLineWidth(4.0 - UIScreenPixel)
-                        context.setLineCap(.round)
-                        context.setStrokeColor(imageColor.cgColor)
-                        
-                        context.move(to: CGPoint(x: 2.0 + UIScreenPixel, y: 2.0 + UIScreenPixel))
-                        context.addLine(to: CGPoint(x: 26.0 - UIScreenPixel, y: 26.0 - UIScreenPixel))
-                        context.strokePath()
-                        
-                        context.move(to: CGPoint(x: 26.0 - UIScreenPixel, y: 2.0 + UIScreenPixel))
-                        context.addLine(to: CGPoint(x: 2.0 + UIScreenPixel, y: 26.0 - UIScreenPixel))
-                        context.strokePath()
-                    })
-                case .share:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallShareButton"), color: imageColor)
-                case .screencast:
-                    if let iconImage = generateTintedImage(image: UIImage(bundleImageName: "Call/ScreenSharePhone"), color: imageColor) {
-                        image = generateScaledImage(image: iconImage, size: iconImage.size.aspectFitted(CGSize(width: 38.0, height: 38.0)))
-                    }
-                }
-            
-                if let image = image {
-                    context.translateBy(x: size.width / 2.0, y: size.height / 2.0)
-                    context.scaleBy(x: imageScale, y: imageScale)
-                    context.translateBy(x: -size.width / 2.0, y: -size.height / 2.0)
-                    
-                    let imageRect = CGRect(origin: CGPoint(x: floor((size.width - image.size.width) / 2.0), y: floor((size.height - image.size.height) / 2.0)), size: image.size)
-                    if drawOverMask {
-                        context.clip(to: imageRect, mask: image.cgImage!)
-                        context.setBlendMode(.copy)
-                        context.setFillColor(UIColor.clear.cgColor)
-                        context.fill(CGRect(origin: CGPoint(), size: size))
-                    } else {
-                        context.draw(image.cgImage!, in: imageRect)
-                    }
-                }
-            })
+            let contentImage = generateButtonContent(size: CGSize(width: self.largeButtonSize, height: self.largeButtonSize), content: content)
             
             if transition.isAnimated, let contentBackgroundImage = contentBackgroundImage, let previousContent = self.contentBackgroundNode.image {
                 self.contentBackgroundNode.image = contentBackgroundImage
@@ -351,32 +403,7 @@ final class CallControllerButtonItemNode: HighlightTrackingButtonNode {
                 self.contentNode.image = contentImage
             }
             
-            self.overlayHighlightNode.image = generateImage(CGSize(width: self.largeButtonSize, height: self.largeButtonSize), contextGenerator: { size, context in
-                context.clear(CGRect(origin: CGPoint(), size: size))
-                
-                let fillColor: UIColor
-                context.setBlendMode(.normal)
-                switch content.appearance {
-                case let .blurred(isFilled):
-                    if isFilled {
-                        fillColor = UIColor(white: 0.0, alpha: 0.1)
-                    } else {
-                        fillColor = UIColor(white: 1.0, alpha: 0.2)
-                    }
-                case let .color(color):
-                    switch color {
-                    case .red:
-                        fillColor = UIColor(rgb: 0xd92326).withMultipliedBrightnessBy(0.2).withAlphaComponent(0.2)
-                    case .green:
-                        fillColor = UIColor(rgb: 0x74db58).withMultipliedBrightnessBy(0.2).withAlphaComponent(0.2)
-                    case let .custom(color, _):
-                        fillColor = UIColor(rgb: color).withMultipliedBrightnessBy(0.2).withAlphaComponent(0.2)
-                    }
-                }
-                
-                context.setFillColor(fillColor.cgColor)
-                context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
-            })
+            self.overlayHighlightNode.image = generateOverlayForButton(content.appearance, size: self.largeButtonSize)
         }
         
         transition.updatePosition(node: self.contentContainer, position: CGPoint(x: size.width / 2.0, y: size.height / 2.0))
