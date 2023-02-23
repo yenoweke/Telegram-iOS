@@ -22,6 +22,7 @@ import GraphCore
 import AudioBlob
 
 private let white = UIColor(rgb: 0xffffff)
+private let connectionGradients: [UIColor] = [UIColor(hexString: "#5295D6"), UIColor(hexString: "#616AD5"), UIColor(hexString: "#AC65D4"), UIColor(hexString: "#7261DA")].compactMap { $0 }
 
 private func interpolateFrame(from fromValue: CGRect, to toValue: CGRect, t: CGFloat) -> CGRect {
     return CGRect(x: floorToScreenPixels(toValue.origin.x * t + fromValue.origin.x * (1.0 - t)), y: floorToScreenPixels(toValue.origin.y * t + fromValue.origin.y * (1.0 - t)), width: floorToScreenPixels(toValue.size.width * t + fromValue.size.width * (1.0 - t)), height: floorToScreenPixels(toValue.size.height * t + fromValue.size.height * (1.0 - t)))
@@ -99,7 +100,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var outgoingVideoNodeCorner: VideoNodeCorner = .bottomRight
     private let backButtonArrowNode: ASImageNode
     private let backButtonNode: HighlightableButtonNode
-    private let statusNode: CallControllerStatusNode
+    private let statusNode: ContestCallControllerStatusNode
     private let toastNode: CallControllerToastContainerNode
     private let buttonsNode: CallControllerButtonsNodeProtocol
     private var keyPreviewNode: CallControllerKeyPreviewNode?
@@ -165,14 +166,12 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     
     private var currentRequestedAspect: CGFloat?
     
-    private let useContestUI: Bool
     private let gradientBackgroundNode: GradientBackgroundNode?
     private var gradientAnimationEnabled = false
     private var audioLevelView: VoiceBlobView?
+    private let speakingContainerNode: ASDisplayNode
     
     init(sharedContext: SharedAccountContext, account: Account, presentationData: PresentationData, statusBar: StatusBar, debugInfo: Signal<(String, String), NoError>, shouldStayHiddenUntilConnection: Bool = false, easyDebugAccess: Bool, call: PresentationCall) {
-        
-        self.useContestUI = true
         
         self.sharedContext = sharedContext
         self.account = account
@@ -192,10 +191,14 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         self.imageNode = TransformImageNode()
         self.imageNode.contentAnimations = [.subsequentUpdates]
+        self.imageNode.cornerRadius = 136/2
+        self.imageNode.clipsToBounds = true
+        self.imageNode.contentMode = .scaleAspectFill
+        
         self.dimNode = ASImageNode()
         self.dimNode.contentMode = .scaleToFill
         self.dimNode.isUserInteractionEnabled = false
-        self.dimNode.backgroundColor = UIColor(white: 0.0, alpha: 0.3)
+        self.dimNode.backgroundColor = UIColor(white: 0.0, alpha: 0.1)
         
         self.backButtonArrowNode = ASImageNode()
         self.backButtonArrowNode.displayWithoutProcessing = true
@@ -203,29 +206,25 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.backButtonArrowNode.image = NavigationBarTheme.generateBackArrowImage(color: .white)
         self.backButtonNode = HighlightableButtonNode()
         
-        self.statusNode = CallControllerStatusNode()
+        self.statusNode = ContestCallControllerStatusNode()
         
-        let connectionGradients: [UIColor] = [UIColor(hexString: "#5295D6"), UIColor(hexString: "#616AD5"), UIColor(hexString: "#AC65D4"), UIColor(hexString: "#7261DA")].compactMap { $0 }
-        if useContestUI {
-            self.gradientBackgroundNode = createGradientBackgroundNode(colors: connectionGradients)
+        self.gradientBackgroundNode = createGradientBackgroundNode(colors: connectionGradients)
 
-            let areaSize = CGSize(width: 300.0, height: 300.0)
-            let blobSize = CGSize(width: 190.0, height: 190.0)
+        let areaSize = CGSize(width: 300.0, height: 300.0)
+        let blobSize = CGSize(width: 190.0, height: 190.0)
 
-            let blobFrame = CGRect(origin: CGPoint(x: (areaSize.width - blobSize.width) / 2.0, y: (areaSize.height - blobSize.height) / 2.0), size: blobSize)
-            
-            self.audioLevelView = VoiceBlobView(
-                frame: blobFrame,
-                maxLevel: 1.5,
-                smallBlobRange: (0, 0),
-                mediumBlobRange: (0.69, 0.87),
-                bigBlobRange: (0.71, 1.0)
-            )
-            self.audioLevelView?.setColor(white)
-        } else {
-            self.gradientBackgroundNode = nil
-            self.audioLevelView = nil
-        }
+        let blobFrame = CGRect(origin: CGPoint(x: (areaSize.width - blobSize.width) / 2.0, y: (areaSize.height - blobSize.height) / 2.0), size: blobSize)
+        
+        self.audioLevelView = VoiceBlobView(
+            frame: blobFrame,
+            maxLevel: 1.0,
+            smallBlobRange: (0, 0),
+            mediumBlobRange: (0.78, 0.92),
+            bigBlobRange: (0.8, 1.0)
+        )
+        self.audioLevelView?.setColor(white)
+        
+        self.speakingContainerNode = ASDisplayNode()
         self.buttonsNode = ContestCallControllerButtonsNode()
         self.toastNode = CallControllerToastContainerNode(strings: self.presentationData.strings)
         self.keyButtonNode = CallControllerKeyButton()
@@ -259,13 +258,13 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
         
         self.gradientBackgroundNode.map(self.containerNode.addSubnode)
-        self.containerNode.addSubnode(self.imageNode)
+        
+        self.audioLevelView.map(self.speakingContainerNode.view.addSubview)
+        self.speakingContainerNode.addSubnode(self.imageNode)
+        self.containerNode.addSubnode(self.speakingContainerNode)
         self.containerNode.addSubnode(self.videoContainerNode)
-        if useContestUI == false {
-            self.containerNode.addSubnode(self.dimNode)
-        } else if let audioLevelView = self.audioLevelView {
-            self.imageNode.view.addSubview(audioLevelView)
-        }
+        
+        self.containerNode.addSubnode(self.dimNode)
         self.containerNode.addSubnode(self.statusNode)
         self.containerNode.addSubnode(self.buttonsNode)
         self.containerNode.addSubnode(self.toastNode)
@@ -1093,10 +1092,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             self.gradientAnimationEnabled = true
             self.animateGradient()
 
+            self.audioLevelView?.updateLevel(10)
             self.audioLevelView?.startAnimating()
-            Queue.mainQueue().after(10.0) { [weak self] in
-                self?.audioLevelView?.stopAnimating()
-            }
+//            Queue.mainQueue().after(10.0) { [weak self] in
+//                self?.audioLevelView?.stopAnimating()
+//            }
         }
     }
 
@@ -1326,17 +1326,18 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.gradientBackgroundNode?.frame = containerFullScreenFrame
         self.gradientBackgroundNode?.updateLayout(size: containerFullScreenFrame.size, transition: .immediate, extendAnimation: false, backwards: false, completion: {})
         
-        let imageNodeFrame: CGRect
-        if self.useContestUI {
-            let imageSize: CGFloat = 136.0
-            let centerY = containerFullScreenFrame.height * 0.34
-            imageNodeFrame = CGRect(origin: CGPoint(x: containerFullScreenFrame.midX - imageSize/2.0, y: centerY - imageSize/2.0), size: CGSize(width: imageSize, height: imageSize))
-            
-            audioLevelView?.frame = CGRect(origin: CGPoint(x: -50.0, y: -50.0), size: CGSize(width: 300.0, height: 300.0))
-        } else {
-            imageNodeFrame = containerFullScreenFrame
-        }
+        let speakingContainerSize: CGFloat = 172.0
+        let speakingCenterY = containerFullScreenFrame.height * 0.34
+        let speakingContainerFrame = CGRect(x: containerFullScreenFrame.midX - speakingContainerSize/2.0, y: speakingCenterY - speakingContainerSize/2.0, width: speakingContainerSize, height: speakingContainerSize)
+        transition.updateFrame(node: self.speakingContainerNode, frame: speakingContainerFrame)
+        
+        let imageSize: CGFloat = 136.0
+        let imageNodeFrame: CGRect = CGRect(origin: CGPoint(x: (speakingContainerFrame.width - imageSize)/2.0, y: (speakingContainerFrame.width - imageSize)/2.0), size: CGSize(width: imageSize, height: imageSize))
         transition.updateFrame(node: self.imageNode, frame: imageNodeFrame)
+        
+        audioLevelView.map {
+            transition.updateFrame(view: $0, frame: CGRect(origin: .zero, size: speakingContainerFrame.size))
+        }
         
         let arguments = TransformImageArguments(corners: ImageCorners(), imageSize: CGSize(width: 640.0, height: 640.0).aspectFilled(layout.size), boundingSize: layout.size, intrinsicInsets: UIEdgeInsets())
         let apply = self.imageNode.asyncLayout()(arguments)
@@ -1355,30 +1356,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         transition.updateAlpha(node: self.backButtonNode, alpha: overlayAlpha)
         transition.updateAlpha(node: self.toastNode, alpha: toastAlpha)
         
-        var statusOffset: CGFloat
-        
-        if self.useContestUI {
-            statusOffset = imageNodeFrame.maxY + 40.0
-        } else {
-            if layout.metrics.widthClass == .regular && layout.metrics.heightClass == .regular {
-                if layout.size.height.isEqual(to: 1366.0) {
-                    statusOffset = 160.0
-                } else {
-                    statusOffset = 120.0
-                }
-            } else {
-                if layout.size.height.isEqual(to: 736.0) {
-                    statusOffset = 80.0
-                } else if layout.size.width.isEqual(to: 320.0) {
-                    statusOffset = 60.0
-                } else {
-                    statusOffset = 64.0
-                }
-            }
-            
-            statusOffset += layout.safeInsets.top
-        }
-        
+        let statusOffset: CGFloat = speakingContainerFrame.maxY + 20.0
         let statusHeight = self.statusNode.updateLayout(constrainedWidth: layout.size.width, transition: transition)
         transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(x: 0.0, y: statusOffset), size: CGSize(width: layout.size.width, height: statusHeight)))
         transition.updateAlpha(node: self.statusNode, alpha: overlayAlpha)
