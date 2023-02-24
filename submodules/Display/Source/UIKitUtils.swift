@@ -12,8 +12,8 @@ public func makeSpringAnimation(_ keyPath: String) -> CABasicAnimation {
     return makeSpringAnimationImpl(keyPath)
 }
 
-public func makeSpringBounceAnimation(_ keyPath: String, _ initialVelocity: CGFloat, _ damping: CGFloat) -> CABasicAnimation {
-    return makeSpringBounceAnimationImpl(keyPath, initialVelocity, damping)
+public func makeSpringBounceAnimation(_ keyPath: String, _ initialVelocity: CGFloat, _ damping: CGFloat, _ mass: CGFloat) -> CABasicAnimation {
+    return makeSpringBounceAnimationImpl(keyPath, initialVelocity, damping, mass)
 }
 
 public func springAnimationValueAt(_ animation: CABasicAnimation, _ t: CGFloat) -> CGFloat {

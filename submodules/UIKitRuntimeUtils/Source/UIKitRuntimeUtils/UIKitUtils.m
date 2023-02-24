@@ -59,9 +59,9 @@ CABasicAnimation * _Nonnull makeSpringAnimationImpl(NSString * _Nonnull keyPath)
     return springAnimation;
 }
 
-CABasicAnimation * _Nonnull makeSpringBounceAnimationImpl(NSString * _Nonnull keyPath, CGFloat initialVelocity, CGFloat damping) {
+CABasicAnimation * _Nonnull makeSpringBounceAnimationImpl(NSString * _Nonnull keyPath, CGFloat initialVelocity, CGFloat damping, CGFloat mass) {
     CASpringAnimation *springAnimation = [CASpringAnimation animationWithKeyPath:keyPath];
-    springAnimation.mass = 5.0f;
+    springAnimation.mass = mass;
     springAnimation.stiffness = 900.0f;
     springAnimation.damping = damping;
     static bool canSetInitialVelocity = true;

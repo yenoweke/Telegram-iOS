@@ -18,7 +18,7 @@ import PresentationDataUtils
 import DeviceAccess
 import ContextUI
 
-private func log(_ what: @autoclosure () -> String) {
+func ddlog(_ what: @autoclosure () -> String) {
     Logger.shared.log("ContestCalls", what())
 }
 
@@ -39,73 +39,73 @@ final class ContestCallContainerNode: ASDisplayNode, CallControllerNodeProtocol 
     
     var toggleMute: (() -> Void)? {
         didSet {
-            log("didSet toggleMute")
+            ddlog("didSet toggleMute")
         }
     }
     
     var setCurrentAudioOutput: ((AudioSessionOutput) -> Void)? {
         didSet {
-            log("didSet setCurrentAudioOutput")
+            ddlog("didSet setCurrentAudioOutput")
         }
     }
     
     var beginAudioOuputSelection: ((Bool) -> Void)? {
         didSet {
-            log("didSet beginAudioOuputSelection")
+            ddlog("didSet beginAudioOuputSelection")
         }
     }
     
     var acceptCall: (() -> Void)? {
         didSet {
-            log("didSet acceptCall")
+            ddlog("didSet acceptCall")
         }
     }
     
     var endCall: (() -> Void)? {
         didSet {
-            log("didSet endCall")
+            ddlog("didSet endCall")
         }
     }
     
     var back: (() -> Void)? {
         didSet {
-            log("didSet back")
+            ddlog("didSet back")
         }
     }
     
     var presentCallRating: ((CallId, Bool) -> Void)? {
         didSet {
-            log("didSet presentCallRating")
+            ddlog("didSet presentCallRating")
         }
     }
     
     var present: ((ViewController) -> Void)? {
         didSet {
-            log("didSet present")
+            ddlog("didSet present")
         }
     }
     
     var callEnded: ((Bool) -> Void)? {
         didSet {
-            log("didSet callEnded")
+            ddlog("didSet callEnded")
         }
     }
     
     var dismissedInteractively: (() -> Void)? {
         didSet {
-            log("didSet dismissedInteractively")
+            ddlog("didSet dismissedInteractively")
         }
     }
     
     var dismissAllTooltips: (() -> Void)? {
         didSet {
-            log("didSet dismissAllTooltips")
+            ddlog("didSet dismissAllTooltips")
         }
     }
     
     init(presentationData: PresentationData) {
         self.presentationData = presentationData
-        log("initialized conatiner NODE")
+        ddlog("initialized conatiner NODE")
         super.init()
         self.backgroundColor = .white
         self.setupNodes()
@@ -140,27 +140,27 @@ final class ContestCallContainerNode: ASDisplayNode, CallControllerNodeProtocol 
     }
     
     func updateAudioOutputs(availableOutputs: [AudioSessionOutput], currentOutput: AudioSessionOutput?) {
-        log("updateAudioOutputs")
+        ddlog("updateAudioOutputs")
     }
     
     func updateCallState(_ callState: PresentationCallState) {
-        log("updateCallState, \(callState)")
+        ddlog("updateCallState, \(callState)")
     }
     
     func updatePeer(accountPeer: Peer, peer: Peer, hasOther: Bool) {
-        log("updatePeer")
+        ddlog("updatePeer")
     }
     
     func animateIn() {
-        log("animateIn")
+        ddlog("animateIn")
     }
     
     func animateOut(completion: @escaping () -> Void) {
-        log("animateOut")
+        ddlog("animateOut")
     }
     
     func expandFromPipIfPossible() {
-        log("expandFromPipIfPossible")
+        ddlog("expandFromPipIfPossible")
     }
     
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
