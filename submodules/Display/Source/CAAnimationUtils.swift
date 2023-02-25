@@ -263,6 +263,34 @@ public extension CALayer {
         
         self.add(animation, forKey: keyPath)
     }
+
+    func animateKeyframe(cgPath: CGPath, duration: Double, keyPath: String, timingFunction: String = CAMediaTimingFunctionName.linear.rawValue, mediaTimingFunction: CAMediaTimingFunction? = nil, removeOnCompletion: Bool = true, additive: Bool = false, completion: ((Bool) -> Void)? = nil) {
+        let k = Float(UIView.animationDurationFactor())
+        var speed: Float = 1.0
+        if k != 0 && k != 1 {
+            speed = Float(1.0) / k
+        }
+        
+        let animation = CAKeyframeAnimation(keyPath: keyPath)
+        animation.path = cgPath
+        animation.speed = speed
+        animation.duration = duration
+        animation.isAdditive = additive
+        if let mediaTimingFunction = mediaTimingFunction {
+            animation.timingFunction = mediaTimingFunction
+        } else {
+            animation.timingFunction = CAMediaTimingFunction(name: CAMediaTimingFunctionName(rawValue: timingFunction))
+        }
+        animation.isRemovedOnCompletion = removeOnCompletion
+        if let completion = completion {
+            animation.delegate = CALayerAnimationDelegate(animation: animation, completion: completion)
+        }
+        animation.fillMode = .forwards
+
+        adjustFrameRate(animation: animation)
+        
+        self.add(animation, forKey: keyPath)
+    }
     
     func springAnimation(from: AnyObject, to: AnyObject, keyPath: String, duration: Double, delay: Double = 0.0, initialVelocity: CGFloat = 0.0, damping: CGFloat = 88.0, mass: CGFloat = 5.0, removeOnCompletion: Bool = true, additive: Bool = false) -> CABasicAnimation {
         let animation: CABasicAnimation

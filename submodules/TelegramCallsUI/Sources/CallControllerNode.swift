@@ -290,7 +290,16 @@ final class CallVideoNode: ASDisplayNode, PreviewVideoNode {
         transition.updateCornerRadius(layer: self.layer, cornerRadius: self.currentCornerRadius)
     }
     
+    enum BlurReason {
+        case common
+        case weakNetwork
+    }
+    
     func updateIsBlurred(isBlurred: Bool, light: Bool = false, animated: Bool = true) {
+        self.updateIsBlurred(isBlurred: isBlurred, reason: .common, light: light, animated: animated)
+    }
+    
+    func updateIsBlurred(isBlurred: Bool, reason: BlurReason, light: Bool = false, animated: Bool = true) {
         if self.hasScheduledUnblur {
             self.hasScheduledUnblur = false
         }
@@ -308,7 +317,9 @@ final class CallVideoNode: ASDisplayNode, PreviewVideoNode {
             }
             if animated {
                 UIView.animate(withDuration: 0.3, animations: {
-                    self.videoPausedNode.alpha = 1.0
+                    if case BlurReason.common = reason {
+                        self.videoPausedNode.alpha = 1.0
+                    }
                     self.effectView?.effect = UIBlurEffect(style: light ? .light : .dark)
                 })
             } else {
