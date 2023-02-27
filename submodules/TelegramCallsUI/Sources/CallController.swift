@@ -25,7 +25,6 @@ protocol CallControllerNodeProtocol: AnyObject {
     var back: (() -> Void)? { get set }
     var presentCallRating: ((CallId, Bool) -> Void)? { get set }
     var present: ((ViewController) -> Void)? { get set }
-    var presentCameraPreview: ((ViewController) -> Void)? { get set }
     var callEnded: ((Bool) -> Void)? { get set }
     var dismissedInteractively: (() -> Void)? { get set }
     var dismissAllTooltips: (() -> Void)? { get set }
@@ -262,14 +261,6 @@ public final class CallController: ViewController {
         self.controllerNode.present = { [weak self] controller in
             if let strongSelf = self {
                 strongSelf.present(controller, in: .window(.root))
-            }
-        }
-        
-        self.controllerNode.presentCameraPreview = { [weak self] controller in
-            if let strongSelf = self {
-//                self?.addChild(controller)
-                strongSelf.present(controller, in: .window(.root))
-//                strongSelf.present(, in: .window(.root))
             }
         }
         

@@ -14,7 +14,6 @@ import PhotoResources
 import CallsEmoji
 
 final class LegacyCallControllerNode: ASDisplayNode, CallControllerNodeProtocol {
-    var presentCameraPreview: ((Display.ViewController) -> Void)?
     
     private let sharedContext: SharedAccountContext
     private let account: Account

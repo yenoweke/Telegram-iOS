@@ -98,6 +98,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var incomingVideoViewRequested: Bool = false
     private var candidateOutgoingVideoNodeValue: CallVideoNode?
     private var outgoingVideoNodeValue: CallVideoNode?
+    private var previewOutgoingVideoView: PresentationCallVideoView?
     private var outgoingVideoViewRequested: Bool = false
     private var fullScreenEffectView: UIVisualEffectView?
     
@@ -162,7 +163,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     var dismissedInteractively: (() -> Void)?
     var present: ((ViewController) -> Void)?
     var dismissAllTooltips: (() -> Void)?
-    var presentCameraPreview: ((ViewController) -> Void)?
 
     private var toastContent: CallControllerToastContent?
     private var displayToastsAfterTimestamp: Double?
@@ -381,7 +381,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                             guard let strongSelf = self else {
                                 return
                             }
-                            
+                            strongSelf.previewOutgoingVideoView = outgoingVideoView
                             if let outgoingVideoView = outgoingVideoView {
                                 outgoingVideoView.view.backgroundColor = .black
                                 outgoingVideoView.view.clipsToBounds = true
@@ -405,14 +405,17 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                                     updateLayoutImpl?(layout, navigationBarHeight)
                                 })
                                 
-                                let controller = ContestVoiceChatCameraPreviewController(sharedContext: strongSelf.sharedContext, cameraNode: outgoingVideoNode, shareCamera: { _, _ in
+                                let fromFrame = strongSelf.buttonsNode.videoButtonFrame().flatMap({ frame in
+                                    strongSelf.buttonsNode.view.convert(frame, to: strongSelf.view)
+                                })
+                                let controller = ContestVoiceChatCameraPreviewController(sharedContext: strongSelf.sharedContext, cameraNode: outgoingVideoNode, fromFrame: fromFrame, shareCamera: { _, _ in
                                     proceed()
                                 }, switchCamera: { [weak self] in
                                     Queue.mainQueue().after(0.1) {
                                         self?.call.switchVideoCamera()
                                     }
                                 })
-                                strongSelf.presentCameraPreview?(controller)
+                                strongSelf.present?(controller)
                                 
                                 updateLayoutImpl = { [weak controller] layout, navigationBarHeight in
                                     controller?.containerLayoutUpdated(layout, transition: .immediate)
@@ -703,8 +706,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         case .active(false), .paused(false):
             if !self.outgoingVideoViewRequested {
                 self.outgoingVideoViewRequested = true
-                let delayUntilInitialized = self.isRequestingVideo
-                self.call.makeOutgoingVideoView(completion: { [weak self] outgoingVideoView in
+                let delayUntilInitialized = self.isRequestingVideo && self.previewOutgoingVideoView == nil
+                
+                let handleOutgoingVideoView: (PresentationCallVideoView?) -> Void = { [weak self] outgoingVideoView in
                     guard let strongSelf = self else {
                         return
                     }
@@ -780,7 +784,13 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                             applyNode()
                         }
                     }
-                })
+                }
+                if let previewOutgoingVideoView = self.previewOutgoingVideoView {
+                    handleOutgoingVideoView(previewOutgoingVideoView)
+                    self.previewOutgoingVideoView = nil
+                } else {
+                    self.call.makeOutgoingVideoView(completion: handleOutgoingVideoView)
+                }
             }
         default:
             self.candidateOutgoingVideoNodeValue = nil
@@ -1541,7 +1551,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             self.removedMinimizedVideoNodeValue = nil
             
             if transition.isAnimated {
-                removedMinimizedVideoNodeValue.layer.animateScale(from: 1.0, to: 0.1, duration: 0.3, removeOnCompletion: false)
+                removedMinimizedVideoNodeValue.layer.animateScale(from: 1.0, to: 0.6, duration: 0.3, removeOnCompletion: false)
                 removedMinimizedVideoNodeValue.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak removedMinimizedVideoNodeValue] _ in
                     removedMinimizedVideoNodeValue?.removeFromSupernode()
                 })
@@ -1646,27 +1656,28 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         if let minimizedVideoNode = self.minimizedVideoNode {
             transition.updateAlpha(node: minimizedVideoNode, alpha: min(pipTransitionAlpha, pinchTransitionAlpha))
             var minimizedVideoTransition = transition
-            var didAppear = false
-            if minimizedVideoNode.frame.isEmpty {
-                minimizedVideoTransition = .immediate
-                didAppear = true
-            }
             if self.minimizedVideoDraggingPosition == nil {
-                if let animationForExpandedVideoSnapshotView = self.animationForExpandedVideoSnapshotView {
-                    self.containerNode.view.addSubview(animationForExpandedVideoSnapshotView)
-                    transition.updateAlpha(layer: animationForExpandedVideoSnapshotView.layer, alpha: 0.0, completion: { [weak animationForExpandedVideoSnapshotView] _ in
-                        animationForExpandedVideoSnapshotView?.removeFromSuperview()
-                    })
-                    transition.updateTransformScale(layer: animationForExpandedVideoSnapshotView.layer, scale: previewVideoFrame.width / fullscreenVideoFrame.width)
-                    
-                    transition.updatePosition(layer: animationForExpandedVideoSnapshotView.layer, position: CGPoint(x: previewVideoFrame.minX + previewVideoFrame.center.x /  fullscreenVideoFrame.width * previewVideoFrame.width, y: previewVideoFrame.minY + previewVideoFrame.center.y / fullscreenVideoFrame.height * previewVideoFrame.height))
-                    self.animationForExpandedVideoSnapshotView = nil
+                // TODO: remove it and animationForExpandedVideoSnapshotView related things
+//                if let animationForExpandedVideoSnapshotView = self.animationForExpandedVideoSnapshotView {
+//                    self.containerNode.view.addSubview(animationForExpandedVideoSnapshotView)
+//                    transition.updateAlpha(layer: animationForExpandedVideoSnapshotView.layer, alpha: 0.0, completion: { [weak animationForExpandedVideoSnapshotView] _ in
+//                        animationForExpandedVideoSnapshotView?.removeFromSuperview()
+//                    })
+//                    transition.updateTransformScale(layer: animationForExpandedVideoSnapshotView.layer, scale: previewVideoFrame.width / fullscreenVideoFrame.width)
+//
+//                    transition.updatePosition(layer: animationForExpandedVideoSnapshotView.layer, position: CGPoint(x: previewVideoFrame.minX + previewVideoFrame.center.x /  fullscreenVideoFrame.width * previewVideoFrame.width, y: previewVideoFrame.minY + previewVideoFrame.center.y / fullscreenVideoFrame.height * previewVideoFrame.height))
+//                    self.animationForExpandedVideoSnapshotView = nil
+//                }
+
+                if minimizedVideoNode.frame.isEmpty {
+                    minimizedVideoNode.frame = previewVideoFrame
+                    minimizedVideoTransition.animateFrame(node: minimizedVideoNode, from: fullscreenVideoFrame, to: previewVideoFrame, removeOnCompletion: false)
+                } else {
+                    minimizedVideoTransition.updateFrame(node: minimizedVideoNode, frame: previewVideoFrame)
                 }
-                minimizedVideoTransition.updateFrame(node: minimizedVideoNode, frame: previewVideoFrame)
+                
+                minimizedVideoTransition = .immediate
                 minimizedVideoNode.updateLayout(size: previewVideoFrame.size, cornerRadius: interpolate(from: 14.0, to: 24.0, value: self.pictureInPictureTransitionFraction), isOutgoing: minimizedVideoNode === self.outgoingVideoNodeValue, deviceOrientation: mappedDeviceOrientation, isCompactLayout: layout.metrics.widthClass == .compact, transition: minimizedVideoTransition)
-                if transition.isAnimated && didAppear {
-                    minimizedVideoNode.layer.animateSpring(from: 0.1 as NSNumber, to: 1.0 as NSNumber, keyPath: "transform.scale", duration: 0.5)
-                }
             }
             
             self.animationForExpandedVideoSnapshotView = nil

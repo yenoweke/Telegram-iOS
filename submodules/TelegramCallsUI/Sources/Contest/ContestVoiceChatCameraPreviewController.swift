@@ -11,6 +11,7 @@ import SolidRoundedButtonNode
 import PresentationDataUtils
 import UIKitRuntimeUtils
 import ReplayKit
+import ComponentFlow
 
 private let accentColor: UIColor = UIColor(rgb: 0x007aff)
 
@@ -26,14 +27,17 @@ final class ContestVoiceChatCameraPreviewController: ViewController {
     private let cameraNode: PreviewVideoNode
     private let shareCamera: (ASDisplayNode, Bool) -> Void
     private let switchCamera: () -> Void
+    private let fromFrame: CGRect?
+    private var didTapShare: Bool = false
     
     private var presentationDataDisposable: Disposable?
     
-    init(sharedContext: SharedAccountContext, cameraNode: PreviewVideoNode, shareCamera: @escaping (ASDisplayNode, Bool) -> Void, switchCamera: @escaping () -> Void) {
+    init(sharedContext: SharedAccountContext, cameraNode: PreviewVideoNode, fromFrame: CGRect?, shareCamera: @escaping (ASDisplayNode, Bool) -> Void, switchCamera: @escaping () -> Void) {
         self.sharedContext = sharedContext
         self.cameraNode = cameraNode
         self.shareCamera = shareCamera
         self.switchCamera = switchCamera
+        self.fromFrame = fromFrame
         
         super.init(navigationBarPresentationData: nil)
         
@@ -66,6 +70,7 @@ final class ContestVoiceChatCameraPreviewController: ViewController {
         self.displayNode = VoiceChatCameraPreviewControllerNode(controller: self, sharedContext: self.sharedContext, cameraNode: self.cameraNode)
         self.controllerNode.shareCamera = { [weak self] unmuted in
             if let strongSelf = self {
+                strongSelf.didTapShare = true
                 strongSelf.shareCamera(strongSelf.cameraNode, unmuted)
                 strongSelf.dismiss()
             }
@@ -91,12 +96,16 @@ final class ContestVoiceChatCameraPreviewController: ViewController {
         
         if !self.animatedIn {
             self.animatedIn = true
-            self.controllerNode.animateIn()
+            self.controllerNode.animateIn(from: self.fromFrame)
         }
     }
     
     override public func dismiss(completion: (() -> Void)? = nil) {
-        self.controllerNode.animateOut(completion: completion)
+        if self.didTapShare {
+            self.controllerNode.dismiss?()
+        } else {
+            self.controllerNode.animateOut(toFrame: self.fromFrame, completion: completion)
+        }
     }
     
     override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -174,7 +183,7 @@ private class VoiceChatCameraPreviewControllerNode: ViewControllerTracingNode, U
         self.titleNode = ASTextNode()
         self.titleNode.attributedText = NSAttributedString(string: title, font: Font.bold(17.0), textColor: UIColor(rgb: 0xffffff))
                 
-        self.doneButton = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(backgroundColor: UIColor(rgb: 0xffffff), foregroundColor: UIColor(rgb: 0x4f5352)), font: .bold, height: 48.0, cornerRadius: 24.0, gloss: false)
+        self.doneButton = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(backgroundColor: UIColor(rgb: 0xffffff), foregroundColor: UIColor(rgb: 0x4f5352)), font: .bold, height: 48.0, cornerRadius: 8.0, gloss: false)
         self.doneButton.title = self.presentationData.strings.VoiceChat_VideoPreviewContinue
         
         if #available(iOS 12.0, *) {
@@ -327,20 +336,32 @@ private class VoiceChatCameraPreviewControllerNode: ViewControllerTracingNode, U
         }
     }
     
-    func animateIn() {
+    func animateIn(from fromFrame: CGRect?) {
+        let fromFrame = fromFrame ?? CGRect(x: self.frame.minX, y: self.frame.maxY, width: 30.0, height: 30.0)
+        
         self.dimNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.4)
         
-        let offset = 0.0//self.bounds.size.height - self.contentBackgroundNode.frame.minY
+        let offset = 0.0
         let dimPosition = self.dimNode.layer.position
-        
-//        let transition = ContainedViewLayoutTransition.animated(duration: 0.4, curve: .spring)
         let targetBounds = self.bounds
         self.bounds = self.bounds.offsetBy(dx: 0.0, dy: -offset)
         self.dimNode.position = CGPoint(x: dimPosition.x, y: dimPosition.y - offset)
-//        transition.animateView({
-            self.bounds = targetBounds
-            self.dimNode.position = dimPosition
-//        })
+
+        self.bounds = targetBounds
+        self.dimNode.position = dimPosition
+        
+        let layerTransition = Transition(.animated(duration: 0.4, curve: .spring))
+        let layer = CAShapeLayer()
+        layer.fillColor = UIColor.black.cgColor
+        
+        let fromPath = UIBezierPath(arcCenter: fromFrame.center, radius: fromFrame.width / 2.0, startAngle: 0.0, endAngle: CGFloat.pi * 2.0, clockwise: true)
+        let toPath = UIBezierPath(arcCenter: fromFrame.center, radius: targetBounds.height, startAngle: 0.0, endAngle: CGFloat.pi * 2.0, clockwise: true)
+        layer.path = fromPath.cgPath
+        self.layer.mask = layer
+        
+        layerTransition.setShapeLayerPath(layer: layer, path: toPath.cgPath, completion: { [weak self] _ in
+            self?.layer.mask = nil
+        })
 
         self.applicationStateDisposable = (self.sharedContext.applicationBindings.applicationIsActive
         |> filter { !$0 }
@@ -353,27 +374,26 @@ private class VoiceChatCameraPreviewControllerNode: ViewControllerTracingNode, U
         })
     }
     
-    func animateOut(completion: (() -> Void)? = nil) {
-        var dimCompleted = false
-        var offsetCompleted = false
+    func animateOut(toFrame: CGRect?, completion: (() -> Void)? = nil) {
+        let toFrame = toFrame ?? CGRect(x: self.frame.minX, y: self.frame.maxY, width: 30.0, height: 30.0)
         
         let internalCompletion: () -> Void = { [weak self] in
-            if let strongSelf = self, dimCompleted && offsetCompleted {
-                strongSelf.dismiss?()
-            }
+            self?.dismiss?()
             completion?()
         }
-        
-        self.dimNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { _ in
-            dimCompleted = true
-            internalCompletion()
-        })
-        
-        let offset = self.bounds.size.height - self.contentBackgroundNode.frame.minY
-        let dimPosition = self.dimNode.layer.position
-        self.dimNode.layer.animatePosition(from: dimPosition, to: CGPoint(x: dimPosition.x, y: dimPosition.y - offset), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
-        self.layer.animateBoundsOriginYAdditive(from: 0.0, to: -offset, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, completion: { _ in
-            offsetCompleted = true
+        let layerTransition = Transition(.animated(duration: 0.4, curve: .spring))
+        layerTransition.setAlpha(layer: self.layer, alpha: 0.0)
+
+        let layer = CAShapeLayer()
+        layer.fillColor = UIColor.black.cgColor
+
+        let fromPath = UIBezierPath(arcCenter: toFrame.center, radius: self.view.frame.height, startAngle: 0.0, endAngle: CGFloat.pi * 2.0, clockwise: true)
+        let toPath = UIBezierPath(arcCenter: toFrame.center, radius: toFrame.width / 2.0, startAngle: 0.0, endAngle: CGFloat.pi * 2.0, clockwise: true)
+        layer.path = fromPath.cgPath
+        self.layer.mask = layer
+
+        layerTransition.setShapeLayerPath(layer: layer, path: toPath.cgPath, completion: { [weak self] _ in
+            self?.layer.mask = nil
             internalCompletion()
         })
     }
@@ -441,26 +461,26 @@ private class VoiceChatCameraPreviewControllerNode: ViewControllerTracingNode, U
         if !isTablet {
             backgroundFrame.size.height += 2000.0
         }
-//        if backgroundFrame.minY < contentFrame.minY {
-        backgroundFrame.origin.y = 0.0
-//        }
         transition.updateFrame(node: self.backgroundNode, frame: backgroundFrame)
         transition.updateFrame(node: self.contentBackgroundNode, frame: CGRect(origin: CGPoint(), size: backgroundFrame.size))
         transition.updateFrame(node: self.wrappingScrollNode, frame: CGRect(origin: CGPoint(), size: layout.size))
         transition.updateFrame(node: self.dimNode, frame: CGRect(origin: CGPoint(), size: layout.size))
         
         let titleSize = self.titleNode.measure(CGSize(width: contentFrame.width, height: .greatestFiniteMagnitude))
-        let titleFrame = CGRect(origin: CGPoint(x: floor((contentFrame.width - titleSize.width) / 2.0), y: 20.0), size: titleSize)
+        let topContentInset = insets.top + 8.0
+        let titleFrame = CGRect(origin: CGPoint(x: floor((contentFrame.width - titleSize.width) / 2.0), y: topContentInset), size: titleSize)
         transition.updateFrame(node: self.titleNode, frame: titleFrame)
                 
         var previewSize: CGSize
         var previewFrame: CGRect
-        let previewAspectRatio: CGFloat = 1.85
+
         if isLandscape {
+            let previewAspectRatio: CGFloat = 1.85
             let previewHeight = contentFrame.height
             previewSize = CGSize(width: min(contentFrame.width - layout.safeInsets.left - layout.safeInsets.right, ceil(previewHeight * previewAspectRatio)), height: previewHeight)
             previewFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((contentFrame.width - previewSize.width) / 2.0), y: 0.0), size: previewSize)
         } else {
+            let previewAspectRatio: CGFloat = contentFrame.height / contentFrame.width
             previewSize = CGSize(width: contentFrame.width, height: min(contentFrame.height, ceil(contentFrame.width * previewAspectRatio)))
             previewFrame = CGRect(origin: CGPoint(), size: previewSize)
         }
@@ -470,7 +490,7 @@ private class VoiceChatCameraPreviewControllerNode: ViewControllerTracingNode, U
         self.shimmerNode.updateAbsoluteRect(previewFrame, within: layout.size)
         
         let cancelButtonSize = self.cancelButton.measure(CGSize(width: (previewFrame.width - titleSize.width) / 2.0, height: .greatestFiniteMagnitude))
-        let cancelButtonFrame = CGRect(origin: CGPoint(x: previewFrame.minX + 17.0, y: 20.0), size: cancelButtonSize)
+        let cancelButtonFrame = CGRect(origin: CGPoint(x: previewFrame.minX + 17.0, y: topContentInset), size: cancelButtonSize)
         transition.updateFrame(node: self.cancelButton, frame: cancelButtonFrame)
         
         self.cameraNode.frame =  CGRect(origin: CGPoint(), size: previewSize)
@@ -485,15 +505,16 @@ private class VoiceChatCameraPreviewControllerNode: ViewControllerTracingNode, U
             transition.updateFrame(node: self.placeholderIconNode, frame: CGRect(origin: CGPoint(x: floor((previewSize.width - imageSize.width) / 2.0), y: floorToScreenPixels(previewSize.height / 2.0) - imageSize.height - 8.0), size: imageSize))
         }
 
-        let buttonInset: CGFloat = 16.0
+        let buttonHorizontalInset: CGFloat = 16.0
+        let buttonBottomInset: CGFloat = max(insets.bottom, 16.0)
         let buttonMaxWidth: CGFloat = 360.0
         
-        let buttonWidth = min(buttonMaxWidth, contentFrame.width - buttonInset * 2.0)
+        let buttonWidth = min(buttonMaxWidth, contentFrame.width - buttonHorizontalInset * 2.0)
         let doneButtonHeight = self.doneButton.updateLayout(width: buttonWidth, transition: transition)
-        transition.updateFrame(node: self.doneButton, frame: CGRect(x: floorToScreenPixels((contentFrame.width - buttonWidth) / 2.0), y: previewFrame.maxY - doneButtonHeight - buttonInset, width: buttonWidth, height: doneButtonHeight))
+        transition.updateFrame(node: self.doneButton, frame: CGRect(x: floorToScreenPixels((contentFrame.width - buttonWidth) / 2.0), y: previewFrame.maxY - doneButtonHeight - buttonBottomInset, width: buttonWidth, height: doneButtonHeight))
         self.broadcastPickerView?.frame = self.doneButton.frame
         
-        let wheelFrame = CGRect(origin: CGPoint(x: 16.0 + previewFrame.minX, y: previewFrame.maxY - doneButtonHeight - buttonInset - 36.0 - 20.0), size: CGSize(width: previewFrame.width - 32.0, height: 36.0))
+        let wheelFrame = CGRect(origin: CGPoint(x: 16.0 + previewFrame.minX, y: previewFrame.maxY - doneButtonHeight - buttonBottomInset - 36.0 - 20.0), size: CGSize(width: previewFrame.width - 32.0, height: 36.0))
         self.wheelNode.updateLayout(size: wheelFrame.size, transition: transition)
         transition.updateFrame(node: self.wheelNode, frame: wheelFrame)
         
