@@ -25,6 +25,7 @@ protocol CallControllerNodeProtocol: AnyObject {
     var back: (() -> Void)? { get set }
     var presentCallRating: ((CallId, Bool) -> Void)? { get set }
     var present: ((ViewController) -> Void)? { get set }
+    var presentCameraPreview: ((ViewController) -> Void)? { get set }
     var callEnded: ((Bool) -> Void)? { get set }
     var dismissedInteractively: (() -> Void)? { get set }
     var dismissAllTooltips: (() -> Void)? { get set }
@@ -50,8 +51,9 @@ public final class CallController: ViewController {
         return self._ready
     }
     
-    private let sharedContext: SharedAccountContext
-    private let account: Account
+    private let accountContext: AccountContext
+    private var sharedContext: SharedAccountContext { accountContext.sharedContext }
+    private var account: Account { accountContext.account }
     public let call: PresentationCall
     private let easyDebugAccess: Bool
     
@@ -73,13 +75,12 @@ public final class CallController: ViewController {
     
     private let idleTimerExtensionDisposable = MetaDisposable()
     
-    public init(sharedContext: SharedAccountContext, account: Account, call: PresentationCall, easyDebugAccess: Bool) {
-        self.sharedContext = sharedContext
-        self.account = account
+    public init(accountContext: AccountContext, call: PresentationCall, easyDebugAccess: Bool) {
+        self.accountContext = accountContext
         self.call = call
         self.easyDebugAccess = easyDebugAccess
         
-        self.presentationData = sharedContext.currentPresentationData.with { $0 }
+        self.presentationData = accountContext.sharedContext.currentPresentationData.with { $0 }
         
         super.init(navigationBarPresentationData: nil)
         
@@ -139,7 +140,7 @@ public final class CallController: ViewController {
 
         let useContestUI = self.call.isOutgoing
         if useContestUI {
-            self.displayNode = ContestCallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
+            self.displayNode = ContestCallControllerNode(accountContext: self.accountContext, sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
             //            self.displayNode = ContestCallContainerNode(presentationData: self.presentationData)
         } else if self.call.isVideoPossible {
             self.displayNode = CallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
@@ -261,6 +262,14 @@ public final class CallController: ViewController {
         self.controllerNode.present = { [weak self] controller in
             if let strongSelf = self {
                 strongSelf.present(controller, in: .window(.root))
+            }
+        }
+        
+        self.controllerNode.presentCameraPreview = { [weak self] controller in
+            if let strongSelf = self {
+//                self?.addChild(controller)
+                strongSelf.present(controller, in: .window(.root))
+//                strongSelf.present(, in: .window(.root))
             }
         }
         

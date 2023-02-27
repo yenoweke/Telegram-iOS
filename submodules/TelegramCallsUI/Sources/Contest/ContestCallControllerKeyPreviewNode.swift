@@ -4,14 +4,25 @@ import Display
 import AsyncDisplayKit
 import SwiftSignalKit
 import LegacyComponents
+import ComponentFlow
+import EmojiStatusComponent
+import AccountContext
+import TelegramCore
+import EmojiTextAttachmentView
 
-private let emojiFont = Font.regular(38.0)
+private let emojiFont = Font.regular(40.0)
 private let titleFont = Font.semibold(16.0)
 private let textFont = Font.regular(16.0)
 private let buttonFont = Font.regular(20.0)
 
+
 final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
+    static let emojiSize = CGSize(width: 48.0, height: 48.0)
+
     private let keyTextNode: ASTextNode
+    private let keyContainerNode: ASDisplayNode
+    private let keyItemViews: [UIView]
+    
     private let titleTextNode: ASTextNode
     private let infoTextNode: ASTextNode
     private let buttonTextNode: ASTextNode
@@ -24,7 +35,19 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
     private var animateOutInProgress = false
     private var light: Bool?
     
-    init(keyText: String, titleText: String, infoText: String, buttonText: String, light: Bool, dismiss: @escaping () -> Void) {
+    init(context: AccountContext, keyText: String, titleText: String, infoText: String, buttonText: String, light: Bool, dismiss: @escaping () -> Void) {
+        let files = keyText.compactMap({
+            context.animatedEmojiStickers["\($0)"]?.first?.file
+        })
+        if files.count == keyText.count {
+            self.keyItemViews = files.map { file in
+                makeEmojiView(file, context: context, size: Self.emojiSize)
+            }
+        } else {
+            self.keyItemViews = []
+        }
+        self.keyContainerNode = ASDisplayNode()
+        
         self.keyTextNode = ASTextNode()
         self.keyTextNode.displaysAsynchronously = false
         self.titleTextNode = ASTextNode()
@@ -43,7 +66,8 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
 
         super.init()
         
-        self.keyTextNode.attributedText = NSAttributedString(string: keyText, attributes: [NSAttributedString.Key.font: emojiFont, NSAttributedString.Key.kern: 6.0 as NSNumber])
+//        self.keyTextNode.attributedText = NSAttributedString(string: keyText, font: emojiFont, textColor: .black)
+        self.keyTextNode.attributedText = NSAttributedString(string: keyText, attributes: [NSAttributedString.Key.font: emojiFont, NSAttributedString.Key.kern: 10.0 as NSNumber])
         
         self.titleTextNode.attributedText = NSAttributedString(string: titleText, font: titleFont, textColor: UIColor.white, paragraphAlignment: .center)
         
@@ -56,15 +80,19 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
         self.containerNode.addSubnode(self.titleTextNode)
         self.containerNode.addSubnode(self.infoTextNode)
         self.containerNode.addSubnode(self.buttonTextNode)
+        self.keyContainerNode.addSubnode(self.keyTextNode)
         self.addSubnode(self.containerNode)
-        self.addSubnode(self.keyTextNode)
-
+        self.addSubnode(self.keyContainerNode)
+        
         self.containerNode.layer.cornerRadius = 16.0
         self.containerNode.clipsToBounds = true
         if #available(iOS 13.0, *) {
             self.containerNode.layer.cornerCurve = .continuous
         }
         self.updateAppearance(light: light)
+        for view in self.keyItemViews {
+            self.keyContainerNode.view.addSubview(view)
+        }
     }
     
     func updateAppearance(light: Bool) {
@@ -94,12 +122,25 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
         let maxWidth = size.width - 90.0
         
         let keyTopOffset: CGFloat = 20.0
+        let keyItemSpacing: CGFloat = 6.0
+        let keyItemsCount: CGFloat = 4.0
+        let keyContainerNodeSize = CGSize(width: Self.emojiSize.width * keyItemsCount + keyItemSpacing * (keyItemsCount - 1), height: Self.emojiSize.height)
+        let keyContainerNodeOrigin = CGPoint(x: floor((maxWidth - keyContainerNodeSize.width) / 2.0), y: keyTopOffset)
+        let keyConteinerFrame = CGRect(origin: keyContainerNodeOrigin, size: keyContainerNodeSize)
+        transition.updateFrame(node: self.keyContainerNode, frame: keyConteinerFrame)
+        
         let keyTextSize = self.keyTextNode.measure(CGSize(width: maxWidth, height: 300.0))
-        let keyTextFrame = CGRect(origin: CGPoint(x: floor((maxWidth - keyTextSize.width) / 2), y: keyTopOffset), size: keyTextSize)
+        let keyTextFrame = CGRect(origin: CGPoint(x: floor((keyConteinerFrame.width - keyTextSize.width) / 2.0) + 5.0, y: floor((keyConteinerFrame.height - keyTextSize.height) / 2.0)), size: keyTextSize)
         transition.updateFrame(node: self.keyTextNode, frame: keyTextFrame)
         
+        var keyItemFrame = CGRect(origin: .zero, size: Self.emojiSize)
+        for keyItemView in self.keyItemViews {
+            transition.updateFrame(view: keyItemView, frame: keyItemFrame)
+            keyItemFrame.origin.x += keyItemSpacing + Self.emojiSize.width
+        }
+        
         let titleTextSize = self.titleTextNode.measure(CGSize(width: maxWidth - 16.0 * 2.0, height: CGFloat.greatestFiniteMagnitude))
-        let titleTextFrame = CGRect(origin: CGPoint(x: floor((maxWidth - titleTextSize.width) / 2.0), y: keyTextFrame.maxY + 10.0), size: titleTextSize)
+        let titleTextFrame = CGRect(origin: CGPoint(x: floor((maxWidth - titleTextSize.width) / 2.0), y: keyConteinerFrame.maxY + 10.0), size: titleTextSize)
         transition.updateFrame(node: self.titleTextNode, frame: titleTextFrame)
         
         let infoTextSize = self.infoTextNode.measure(CGSize(width: maxWidth - 16.0 * 2.0, height: CGFloat.greatestFiniteMagnitude))
@@ -136,31 +177,38 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
         self.containerNode.layer.animatePosition(from: containerFromPosition, to: self.containerNode.layer.position, duration: keyAnimationDuration)
 
         let keyAnimateFrom = self.convert(CGPoint(x: rect.midX, y: rect.midY), from: parentNode)
-        let keyAnimateTo = self.keyTextNode.layer.position
+        let keyAnimateTo = self.keyContainerNode.layer.position
         let keyPositionPath = makeInPath(startPoint: keyAnimateFrom, endPoint: keyAnimateTo)
-        self.keyTextNode.layer.animateKeyframe(cgPath: keyPositionPath, duration: keyAnimationDuration, keyPath: "position", mediaTimingFunction: CAMediaTimingFunction(name: .easeOut))
+        self.keyContainerNode.layer.animateKeyframe(cgPath: keyPositionPath, duration: keyAnimationDuration, keyPath: "position", mediaTimingFunction: CAMediaTimingFunction(name: .easeOut))
 
         if let transitionView = fromNode.view.snapshotView(afterScreenUpdates: false) {
             self.view.addSubview(transitionView)
             transitionView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
             transitionView.layer.animateKeyframe(cgPath: keyPositionPath, duration: keyAnimationDuration, keyPath: "position", mediaTimingFunction: CAMediaTimingFunction(name: .easeOut))
 
-            transitionView.layer.animateScale(from: 1.0, to: self.keyTextNode.frame.size.width / rect.size.width, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
+            transitionView.layer.animateScale(from: 1.0, to: self.keyContainerNode.frame.size.width / rect.size.width, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
         }
-        self.keyTextNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15, removeOnCompletion: false)
-        self.keyTextNode.layer.animateScale(from: rect.size.width / self.keyTextNode.frame.size.width, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+        self.keyContainerNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15, removeOnCompletion: false)
+        self.keyContainerNode.layer.animateScale(from: rect.size.width / self.keyContainerNode.frame.size.width, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+        
+        if keyItemViews.isEmpty == false {
+            self.keyTextNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
+            for view in keyItemViews {
+                view.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15, removeOnCompletion: false)
+            }
+        }
     }
     
     func animateOut(to rect: CGRect, toNode: ASDisplayNode, parentNode: ASDisplayNode, completion: @escaping () -> Void) {
         let keyAnimateTo = self.convert(CGPoint(x: rect.midX + 2.0, y: rect.midY), from: parentNode)
-        let keyAnimateFrom = self.keyTextNode.layer.position
+        let keyAnimateFrom = self.keyContainerNode.layer.position
         let path = makeOutPath(startPoint: keyAnimateFrom, endPoint: keyAnimateTo)
-        self.keyTextNode.layer.position = keyAnimateTo
-        self.keyTextNode.layer.animateKeyframe(cgPath: path, duration: 0.3, keyPath: "position", mediaTimingFunction: CAMediaTimingFunction(name: .easeOut), removeOnCompletion: false, completion: {_ in
+        self.keyContainerNode.layer.position = keyAnimateTo
+        self.keyContainerNode.layer.animateKeyframe(cgPath: path, duration: 0.3, keyPath: "position", mediaTimingFunction: CAMediaTimingFunction(name: .easeOut), removeOnCompletion: false, completion: {_ in
             completion()
         })
         
-        self.keyTextNode.layer.animateScale(from: 1.0, to: rect.size.width / (self.keyTextNode.frame.size.width - 2.0), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
+        self.keyContainerNode.layer.animateScale(from: 1.0, to: rect.size.width / (self.keyTextNode.frame.size.width - 12.0), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
 
         let scaleFactor: CGFloat = 0.7
         let duration: TimeInterval = 0.12
@@ -172,6 +220,13 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
         self.containerNode.layer.animatePosition(from: self.containerNode.layer.position, to: containerToPosition, duration: duration, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)
         self.containerNode.layer.animateScale(from: 1.0, to: scaleFactor, duration: duration, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)
         self.containerNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: duration, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)
+        
+        if keyItemViews.isEmpty == false {
+            self.keyTextNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.1, removeOnCompletion: false)
+            for view in keyItemViews {
+                view.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.1, removeOnCompletion: false)
+            }
+        }
     }
     
     @objc func tapGesture(_ recognizer: UITapGestureRecognizer) {
@@ -179,7 +234,32 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
             self.dismiss()
         }
     }
-    
+}
+
+private func makeEmojiView(_ animationFile: TelegramMediaFile?, context: AccountContext, size: CGSize) -> UIView {
+    let iconView = ComponentHostView<Empty>()
+
+    if let animationFile = animationFile {
+        let animationContent: EmojiStatusComponent.AnimationContent = .file(file: animationFile)
+        let content: EmojiStatusComponent.Content = .animation(content: animationContent, size: size, placeholderColor: UIColor.white.withAlphaComponent(0.1), themeColor: nil, loopMode: .forever)
+        let iconSize = iconView.update(
+            transition: .immediate,
+            component: AnyComponent(EmojiStatusComponent(
+                context: context,
+                animationCache: context.animationCache,
+                animationRenderer: context.animationRenderer,
+                content: content,
+                isVisibleForAnimations: true,
+                action: nil
+            )),
+            environment: {},
+            containerSize: size
+        )
+        ddlog("iconSize iconSize \(iconSize)")
+        iconView.isUserInteractionEnabled = false
+        iconView.frame = CGRect(origin: .zero, size: size)
+    }
+    return iconView
 }
 
 private func makeInPath(startPoint: CGPoint, endPoint: CGPoint) -> CGPath {

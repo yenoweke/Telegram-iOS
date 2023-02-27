@@ -89,6 +89,15 @@ public enum ContainedViewLayoutTransition {
     case immediate
     case animated(duration: Double, curve: ContainedViewLayoutTransitionCurve)
     
+    public init(_ transition: ContainedViewLayoutTransition, durationFactor: Double) {
+        switch transition {
+        case .immediate:
+            self = .immediate
+        case .animated(let duration, let curve):
+            self = .animated(duration: duration * durationFactor, curve: curve)
+        }
+    }
+    
     public var isAnimated: Bool {
         if case .immediate = self {
             return false

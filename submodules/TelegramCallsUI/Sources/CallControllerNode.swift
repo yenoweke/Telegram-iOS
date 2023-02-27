@@ -358,6 +358,8 @@ final class CallVideoNode: ASDisplayNode, PreviewVideoNode {
 }
 
 final class CallControllerNode: ViewControllerTracingNode, CallControllerNodeProtocol {
+    var presentCameraPreview: ((Display.ViewController) -> Void)?
+    
     private enum VideoNodeCorner {
         case topLeft
         case topRight
