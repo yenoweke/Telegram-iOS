@@ -215,12 +215,14 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
     }
     
     func updateLayout(constrainedWidth: CGFloat, compact: Bool, transition: ContainedViewLayoutTransition) -> CGFloat {
+        // compact disabled after update in contest channel. "The partner's name is slightly moved below to prevent cases when it has to get cut because of the emoji row. "
+        let compact = false
         self.isCompact = compact
         self.validLayoutWidth = constrainedWidth
         
-        let nameFont = compact ? compactNameFont : regularNameFont
-        let statusFont = compact ? compactStatusFont : regularStatusFont
-        let receptionFont = compact ? compactReceptionFont : regularReceptionFont
+        let nameFont = self.isCompact ? compactNameFont : regularNameFont
+        let statusFont = self.isCompact ? compactStatusFont : regularStatusFont
+        let receptionFont = self.isCompact ? compactReceptionFont : regularReceptionFont
         
         var statusOffset: CGFloat = 0.0
         let statusText: String
@@ -258,7 +260,7 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
             }
         }
         
-        let spacing: CGFloat = compact ? -4.0 : 1.0
+        let spacing: CGFloat = self.isCompact ? -4.0 : 1.0
         let insets = UIEdgeInsets(top: 2.0, left: 2.0, bottom: 2.0, right: 2.0)
         let (titleLayout, titleApply) = TextNode.asyncLayout(self.titleNode)(TextNodeLayoutArguments(attributedString: NSAttributedString(string: self.title, font: nameFont, textColor: .white), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: constrainedWidth - 20.0, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: insets))
         let (statusMeasureLayout, statusMeasureApply) = TextNode.asyncLayout(self.statusMeasureNode)(TextNodeLayoutArguments(attributedString: NSAttributedString(string: statusMeasureText, font: statusFont, textColor: .white), backgroundColor: nil, maximumNumberOfLines: 0, truncationType: .end, constrainedSize: CGSize(width: constrainedWidth - 20.0, height: CGFloat.greatestFiniteMagnitude), alignment: .center, cutout: nil, insets: insets))

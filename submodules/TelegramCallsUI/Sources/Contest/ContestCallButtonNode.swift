@@ -58,17 +58,21 @@ final class ContestCallButtonNode: HighlightTrackingButtonNode {
         self.contentContainer.addSubnode(self.contentNode)
         self.contentContainer.addSubnode(self.overlayHighlightNode)
         
-        self.highligthedChanged = { [weak self] highlighted in
-            guard let strongSelf = self else {
-                return
-            }
-            if highlighted {
-                strongSelf.overlayHighlightNode.alpha = 1.0
-            } else {
-                strongSelf.overlayHighlightNode.alpha = 0.0
-                strongSelf.overlayHighlightNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)
-            }
-        }
+//        self.highligthedChanged = { [weak self] highlighted in
+//            guard let strongSelf = self else {
+//                return
+//            }
+//            if highlighted {
+//                strongSelf.overlayHighlightNode.alpha = 1.0
+//            } else {
+//                strongSelf.overlayHighlightNode.alpha = 0.0
+//                strongSelf.overlayHighlightNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)
+//            }
+//        }
+    }
+    
+    func update(size: CGSize, content: CallControllerButtonItemNode.Content, text: String, transition: ContainedViewLayoutTransition) {
+        self.update(text: text, content: content, transition: transition)
     }
     
     func update(text: String, content: CallControllerButtonItemNode.Content, transition: ContainedViewLayoutTransition) {
@@ -106,14 +110,15 @@ final class ContestCallButtonNode: HighlightTrackingButtonNode {
                     let targetNode = makeASImageNode(frame: self.contentNode.frame, image: contentImage)
                     self.contentNode.addSubnode(targetNode)
                     
-                    self.contentNode.image = contentImage
+                    self.contentNode.image = nil
                     
                     let reversed = !content.appearance.isFilled
                     
                     hideNodeCircularLayer(reversed ? targetNode: sourceNode, duration: stageDuration, reversed: reversed, completion: { _ in})
-                    animateCircleFill(reversed ? sourceNode: targetNode, duration: stageDuration, reversed: reversed, completion: { _ in
+                    animateCircleFill(reversed ? sourceNode: targetNode, duration: stageDuration, reversed: reversed, completion: { [weak self] _ in
                         sourceNode.removeFromSupernode()
                         targetNode.removeFromSupernode()
+                        self?.contentNode.image = contentImage
                     })
                 } else {
                     self.contentNode.image = contentImage

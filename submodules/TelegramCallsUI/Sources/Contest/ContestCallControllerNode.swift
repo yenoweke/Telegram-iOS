@@ -217,9 +217,17 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         self.imageNode = TransformImageNode()
         self.imageNode.contentAnimations = [.subsequentUpdates]
-        self.imageNode.cornerRadius = 136/2
+        let imageSize: CGSize = CGSize(width: 136.0, height: 136.0)
+        self.imageNode.cornerRadius = imageSize.width / 2.0
         self.imageNode.clipsToBounds = true
         self.imageNode.contentMode = .scaleAspectFill
+        let (imageNodeBlobPoints, smoothness) = generateBlob(for: imageSize)
+        let imageNodeBlobPath = UIBezierPath.smoothCurve(through: imageNodeBlobPoints, length: imageSize.width, smoothness: smoothness).cgPath
+        let imageMaskLayer = CAShapeLayer()
+        imageMaskLayer.fillColor = UIColor.black.cgColor
+        imageMaskLayer.path = imageNodeBlobPath
+        imageMaskLayer.frame = CGRect(origin: CGPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0), size: imageSize)
+        self.imageNode.layer.mask = imageMaskLayer
         
 //        self.dimNode = ASImageNode()
 //        self.dimNode.contentMode = .scaleToFill
@@ -243,13 +251,13 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             frame: .zero,
             maxLevel: 1.0,
             smallBlobRange: (0, 0),
-            mediumBlobRange: (0.78, 0.88),
-            bigBlobRange: (0.8, 1.0)
+            mediumBlobRange: (0.78, 0.94),
+            bigBlobRange: (0.83, 1.0)
         )
         self.audioLevelView?.setColor(white)
         
         self.speakingContainerNode = ASDisplayNode()
-        self.buttonsNode = ContestCallControllerButtonsNode()
+        self.buttonsNode = ContestCallControllerButtonsNode(strings: self.presentationData.strings)
         self.toastNode = ContestCallControllerToastContainerNode(strings: self.presentationData.strings)
         self.keyButtonNode = ContestCallControllerKeyButton()
         self.keyButtonNode.accessibilityElementsHidden = false
@@ -1041,7 +1049,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         helperGradientBackgroundNode.updateLayout(size: gradientBackgroundNode.frame.size, transition: .immediate, extendAnimation: false, backwards: false, completion: {})
         self.containerNode.insertSubnode(helperGradientBackgroundNode, belowSubnode: self.speakingContainerNode)
         
-        self.animateGradient(node: helperGradientBackgroundNode)
+        self.startAnimateGradient(node: helperGradientBackgroundNode)
 
         
         transition.updateAlpha(node: helperGradientBackgroundNode, alpha: 1.0, completion: { [weak self, weak helperGradientBackgroundNode] _ in
@@ -1251,7 +1259,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 self.containerNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
             }
             self.gradientAnimationEnabled = true
-            self.animateGradient(node: self.gradientBackgroundNode)
+            self.startAnimateGradient(node: self.gradientBackgroundNode)
 
             self.audioLevelView?.updateLevel(0.75)
             self.audioLevelView?.startAnimating()
@@ -1261,8 +1269,16 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
     }
     
+    private var gradientAnimationInProgress = false
+    private func startAnimateGradient(node: GradientBackgroundNode?) {
+        if self.gradientAnimationInProgress { return }
+        self.gradientAnimationInProgress = true
+        self.animateGradient(node: node)
+    }
+
     private func animateGradient(node: GradientBackgroundNode?) {
         guard self.gradientAnimationEnabled == true, let node = node else {
+            self.gradientAnimationInProgress = false
             return
         }
         node.animateEvent(transition: .animated(duration: 0.8, curve: .linear), extendAnimation: false, backwards: false, completion: { [weak node, weak self] in
@@ -1486,20 +1502,18 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.gradientBackgroundNode?.updateLayout(size: containerFullScreenFrame.size, transition: .immediate, extendAnimation: false, backwards: false, completion: {})
         
         
-        let speakingContainerSize: CGFloat = 172.0 + 28.0
+        let speakingContainerSize: CGFloat = 136.0
         let speakingCenterY = containerFullScreenFrame.height * 0.34
         let speakingContainerFrame = CGRect(x: containerFullScreenFrame.midX - speakingContainerSize/2.0, y: speakingCenterY - speakingContainerSize/2.0, width: speakingContainerSize, height: speakingContainerSize)
         
         if self.audioLevelViewAnimationInProgress == false {
-            
             transition.updateFrame(node: self.speakingContainerNode, frame: speakingContainerFrame)
-            
-            let imageSize: CGFloat = 136.0
-            let imageNodeFrame: CGRect = CGRect(origin: CGPoint(x: (speakingContainerFrame.width - imageSize)/2.0, y: (speakingContainerFrame.width - imageSize)/2.0), size: CGSize(width: imageSize, height: imageSize))
-            transition.updateFrame(node: self.imageNode, frame: imageNodeFrame)
-            
+            transition.updateFrame(node: self.imageNode, frame: CGRect(origin: .zero, size: speakingContainerFrame.size))
+
             audioLevelView.map {
-                transition.updateFrame(view: $0, frame: CGRect(origin: .zero, size: speakingContainerFrame.size))
+                var rect = CGRectInset(speakingContainerFrame, -18.0, -18.0)
+                rect.origin = CGPoint(x: -18.0, y: -18.0)
+                transition.updateFrame(view: $0, frame: rect)
             }
         }
         
@@ -1512,7 +1526,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         let backSize = self.backButtonNode.measure(CGSize(width: 320.0, height: 100.0))
         if let image = self.backButtonArrowNode.image {
-            transition.updateFrame(node: self.backButtonArrowNode, frame: CGRect(origin: CGPoint(x: 10.0, y: topOriginY + 22.0), size: image.size))
+            transition.updateFrame(node: self.backButtonArrowNode, frame: CGRect(origin: CGPoint(x: 10.0, y: topOriginY + 24.0), size: image.size))
         }
         transition.updateFrame(node: self.backButtonNode, frame: CGRect(origin: CGPoint(x: 29.0, y: topOriginY + 22.0), size: backSize))
         
@@ -1523,12 +1537,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         transition.updateAlpha(node: self.toastNode, alpha: toastAlpha)
         
-        
-        let compactStatusNode = self.incomingVideoNodeValue != nil
-        let statusOffset: CGFloat = speakingContainerFrame.maxY + 20.0 - 28.0
+        let compactStatusNode = self.incomingVideoNodeValue != nil || self.outgoingVideoNodeValue != nil
+        let statusOffset: CGFloat = speakingContainerFrame.maxY + 40.0
         let statusHeight = self.statusNode.updateLayout(constrainedWidth: layout.size.width, compact: compactStatusNode, transition: transition)
         if compactStatusNode {
-            transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(x: 0.0, y: self.backButtonNode.frame.minY - 11.0), size: CGSize(width: layout.size.width, height: statusHeight)))
+            transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(x: 0.0, y: self.backButtonNode.frame.maxY + 20.0), size: CGSize(width: layout.size.width, height: statusHeight)))
         } else {
             transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(x: 0.0, y: statusOffset), size: CGSize(width: layout.size.width, height: statusHeight)))
         }
@@ -1593,9 +1606,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                     layer.cornerCurve = .continuous
                 }
                 expandedVideoNode.layer.mask = layer
-                layerTransition.setShapeLayerPath(layer: layer, path: toPath.cgPath, completion: { [weak layer] _ in
+                layerTransition.setShapeLayerPath(layer: layer, path: toPath.cgPath, completion: { [weak expandedVideoNode, weak layer] _ in
                     guard let layer = layer else { return }
-                    layerTransition.setCornerRadius(layer: layer, cornerRadius: 0.0)
+                    layerTransition.setCornerRadius(layer: layer, cornerRadius: 0.0, completion: { [weak expandedVideoNode] _ in
+                        expandedVideoNode?.layer.mask = nil
+                    })
                 })
 
                 let expandedVideoShortTransition = ContainedViewLayoutTransition(transition, durationFactor: 1.0 / 3.0)
@@ -1747,7 +1762,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 }
             })
 
-            self.containerNode.insertSubnode(keyPreviewNode, belowSubnode: self.statusNode)
+            self.containerNode.insertSubnode(keyPreviewNode, aboveSubnode: self.statusNode)
             self.keyPreviewNode = keyPreviewNode
             
             if let (validLayout, _) = self.validLayout {
@@ -2138,4 +2153,50 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
         return nil
     }
+}
+
+private func generateBlob(for size: CGSize) -> ([CGPoint], CGFloat) {
+    let minRandomness: CGFloat = 0.1
+    let maxRandomness: CGFloat = 0.5
+    let speedLevel: CGFloat = 1.0
+    let pointsCount: Int = 8
+    let randomness = minRandomness + (maxRandomness - minRandomness) * speedLevel
+    
+    let angle = (CGFloat.pi * 2) / CGFloat(pointsCount)
+    let smoothness = ((4 / 3) * tan(angle / 4)) / sin(angle / 2) / 2
+    
+    return (blob(pointsCount: pointsCount, randomness: randomness)
+        .map {
+            return CGPoint(
+                x: $0.x * CGFloat(size.width),
+                y: $0.y * CGFloat(size.height)
+            )
+        }, smoothness)
+}
+
+private func blob(pointsCount: Int, randomness: CGFloat) -> [CGPoint] {
+    let angle = (CGFloat.pi * 2) / CGFloat(pointsCount)
+    
+    let rgen = { () -> CGFloat in
+        let accuracy: UInt32 = 1000
+        let random = arc4random_uniform(accuracy)
+        return CGFloat(random) / CGFloat(accuracy)
+    }
+    let rangeStart: CGFloat = 1 / (1 + randomness / 10)
+    
+    let startAngle = angle * CGFloat(arc4random_uniform(100)) / CGFloat(100)
+    
+    let points = (0 ..< pointsCount).map { i -> CGPoint in
+        let randPointOffset = (rangeStart + CGFloat(rgen()) * (1 - rangeStart)) / 2
+        let angleRandomness: CGFloat = angle * 0.1
+        let randAngle = angle + angle * ((angleRandomness * CGFloat(arc4random_uniform(100)) / CGFloat(100)) - angleRandomness * 0.5)
+        let pointX = sin(startAngle + CGFloat(i) * randAngle)
+        let pointY = cos(startAngle + CGFloat(i) * randAngle)
+        return CGPoint(
+            x: pointX * randPointOffset,
+            y: pointY * randPointOffset
+        )
+    }
+    
+    return points
 }
