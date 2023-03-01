@@ -33,7 +33,7 @@ final class ContestCallRatingNode: ASDisplayNode {
     private var lastImage: UIImage?
     private var validLayout: CGSize?
     
-    init(strings: PresentationStrings, dismiss: @escaping () -> Void, apply: @escaping (Int) -> Void) {
+    init(strings: PresentationStrings, light: Bool, dismiss: @escaping () -> Void, apply: @escaping (Int) -> Void) {
         self.strings = strings
         self.apply = apply
         self.dismiss = dismiss
@@ -44,9 +44,9 @@ final class ContestCallRatingNode: ASDisplayNode {
     
         if #available(iOS 13.0, *) {
             self.contentNode.layer.cornerCurve = .continuous
-            self.contentEffectView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialLight))
+            self.contentEffectView = UIVisualEffectView(effect: UIBlurEffect(style: light ? .systemThinMaterialLight : .systemThinMaterialDark))
         } else {
-            self.contentEffectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
+            self.contentEffectView = UIVisualEffectView(effect: UIBlurEffect(style: light ? .light : .dark))
         }
         self.contentEffectView.alpha = 0.25
         
@@ -92,6 +92,8 @@ final class ContestCallRatingNode: ASDisplayNode {
         guard let buttonFrom = buttonFrom, let buttonSnapshot = buttonSnapshot else {
             transition.updateAlpha(node: self.contentNode, alpha: 1.0)
             transition.updateAlpha(layer: self.actionNode.layer, alpha: 1.0)
+            transition.animateTransformScale(node: self.contentNode, from: 0.8)
+            transition.animateTransformScale(node: self.actionNode, from: 0.8)
             return
         }
     
@@ -204,8 +206,10 @@ final class ContestCallRatingNode: ASDisplayNode {
         let spaceAfterContent: CGFloat
         if size.height > contentSize.height + 66.0 + actionButtonHeight {
             spaceAfterContent = 66.0
-        } else {
+        } else if size.height > contentSize.height + 24.0 + actionButtonHeight {
             spaceAfterContent = 24.0
+        } else {
+            spaceAfterContent = 12.0
         }
         let actionNodeFrame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + spaceAfterContent), size: CGSize(width: size.width, height: actionButtonHeight))
         transition.updateFrame(node: self.actionNode, frame: actionNodeFrame)

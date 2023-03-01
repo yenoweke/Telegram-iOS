@@ -199,6 +199,12 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
             }
         }
     }
+    
+    var light: Bool = false {
+        didSet {
+            self.receptionTextStatusContainerNode.view.backgroundColor = light ? UIColor.white.withAlphaComponent(0.15) : UIColor.black.withAlphaComponent(0.25)
+        }
+    }
 
     private var statusTimer: SwiftSignalKit.Timer?
     private var validLayoutWidth: CGFloat?
@@ -210,7 +216,7 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
         }
     }
     
-    init(weakNetworkText: String) {
+    init(weakNetworkText: String, light: Bool) {
         self.titleNode = TextNode()
         self.statusContainerNode = ASDisplayNode()
         self.statusNode = TextNode()
@@ -253,8 +259,8 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
         
         self.addSubnode(self.titleActivateAreaNode)
         self.addSubnode(self.statusActivateAreaNode)
-        self.receptionTextStatusContainerNode.view.backgroundColor = UIColor.white.withAlphaComponent(0.15)
         self.receptionTextStatusContainerNode.addSubnode(self.receptionTextNode)
+        self.light = light
     }
     
     deinit {

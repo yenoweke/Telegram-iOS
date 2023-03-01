@@ -493,8 +493,8 @@ public final class PresentationCallImpl: PresentationCall {
                 presentationState = PresentationCallState(state: .connecting(nil), videoState: mappedVideoState, remoteVideoState: mappedRemoteVideoState, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
             case let .dropping(reason):
                 presentationState = PresentationCallState(state: .terminating(reason), videoState: mappedVideoState, remoteVideoState: .inactive, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
-            case let .terminated(id, reason, _):
-                let reportRating = true //self.callWasActive && (options.contains(.reportRating) || self.shouldPresentCallRating)
+            case let .terminated(id, reason, options):
+                let reportRating = self.callWasActive && (options.contains(.reportRating) || self.shouldPresentCallRating)
                 presentationState = PresentationCallState(state: .terminated(id, reason, reportRating), videoState: mappedVideoState, remoteVideoState: .inactive, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
             case let .requesting(ringing):
                 presentationState = PresentationCallState(state: .requesting(ringing), videoState: mappedVideoState, remoteVideoState: mappedRemoteVideoState, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
@@ -634,15 +634,20 @@ public final class PresentationCallImpl: PresentationCall {
             terminating = true
         }
         
+        // TODO: remove if flag "useContestUI" unnecessary
+        if self.useContestUI, !self.didSetCanBeRemoved, let presentationCallState = presentationState?.state, case PresentationCallState.State.terminated(_, _, let reportRating) = presentationCallState {
+            self.didSetCanBeRemoved = true
+            if reportRating {
+                self.canBeRemovedPromise.set(.single(true) |> delay(8.0, queue: Queue.mainQueue()))
+            } else {
+                self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
+            }
+        }
+        
         if terminating, !wasTerminated {
-            if !self.didSetCanBeRemoved {
+            if !self.didSetCanBeRemoved, self.useContestUI == false {
                 self.didSetCanBeRemoved = true
-                
-                if self.useContestUI, let presentationCallState = presentationState?.state, case PresentationCallState.State.terminated(_, _, true) = presentationCallState {
-                    self.canBeRemovedPromise.set(.single(true) |> delay(8.0, queue: Queue.mainQueue()))
-                } else {
-                    self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
-                }
+                self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
             }
             self.hungUpPromise.set(true)
             if sessionState.isOutgoing {

@@ -82,7 +82,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var presentationData: PresentationData
     private var peer: Peer?
     private let debugInfo: Signal<(String, String), NoError>
-    private var forceReportRating = true
+    private var forceReportRating = false
     private let easyDebugAccess: Bool
     private let call: PresentationCall
     
@@ -96,12 +96,18 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var candidateIncomingVideoNodeValue: CallVideoNode?
     private var incomingVideoNodeValue: CallVideoNode? {
         didSet {
-            self.keyPreviewNode?.updateAppearance(light: self.incomingVideoNodeValue == nil)
+            self.keyPreviewNode?.updateAppearance(light: !self.hasVideoNodes)
+            self.statusNode.light = !self.hasVideoNodes
         }
     }
     private var incomingVideoViewRequested: Bool = false
     private var candidateOutgoingVideoNodeValue: CallVideoNode?
-    private var outgoingVideoNodeValue: CallVideoNode?
+    private var outgoingVideoNodeValue: CallVideoNode? {
+        didSet {
+            self.keyPreviewNode?.updateAppearance(light: !self.hasVideoNodes)
+            self.statusNode.light = !self.hasVideoNodes
+        }
+    }
     private var previewOutgoingVideoView: PresentationCallVideoView?
     private var outgoingVideoViewRequested: Bool = false
     private var fullScreenEffectView: UIVisualEffectView?
@@ -251,7 +257,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.backButtonNode = HighlightableButtonNode()
         self.backButtonNode.alpha = 0.0
         
-        self.statusNode = ContestCallControllerStatusNode(weakNetworkText: presentationData.strings.Calls_ContestWeakNetwork)
+        self.statusNode = ContestCallControllerStatusNode(weakNetworkText: presentationData.strings.Calls_ContestWeakNetwork, light: true)
         
         self.gradientBackgroundNode = createGradientBackgroundNode(colors: initiatingGradients)
         self.gradientEffectView = makeVisualEffectForGradient()
@@ -965,6 +971,15 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             }
         }
         
+        if case let .terminated(id, _, reportRating) = callState.state, let callId = id {
+            let presentRating = reportRating || self.forceReportRating
+            if presentRating {
+                self.showCallRating(callId, self.call.isVideo)
+            }
+            self.callEnded?(presentRating)
+            self.dismissAllTooltips?()
+        }
+
         self.updateToastContent()
         self.updateButtonsMode()
         self.updateDimVisibility()
@@ -982,14 +997,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             }
         }
         
-        if case let .terminated(id, _, reportRating) = callState.state, let callId = id {
-            let presentRating = reportRating || self.forceReportRating
-            if presentRating {
-                self.showCallRating(callId, self.call.isVideo)
-            }
-            self.callEnded?(presentRating)
-        }
-        
         let hasIncomingVideoNode = self.incomingVideoNodeValue != nil && self.expandedVideoNode === self.incomingVideoNodeValue
         self.videoContainerNode.isPinchGestureEnabled = hasIncomingVideoNode
     }
@@ -998,7 +1005,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         self.audioLevelView?.stopAnimating(duration: 0.2)
         
-        let node = ContestCallRatingNode(strings: self.presentationData.strings, dismiss: { [weak self] in
+        let node = ContestCallRatingNode(strings: self.presentationData.strings, light: !self.hasVideoNodes, dismiss: { [weak self] in
             self?.ratingDissmiss?()
         }, apply: { [weak self] rating in
             self?.ratingSelected?(RatingSelectedItem(rating: rating, isVideo: isVideo, callId: callId))
@@ -1010,12 +1017,15 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         if let (layout, navigationHeight) = self.validLayout {
             self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: transition)
         }
-        
-        let (buttonFrame, snapshotView) = self.buttonsNode.endButton()
-        let buttonFrom = buttonFrame.flatMap({ frame in
-            self.buttonsNode.view.convert(frame, to: node.view)
-        })
-        node.animateIn(buttonFrom: buttonFrom, buttonSnapshot: snapshotView, transition: transition)
+        if self.hasVideoNodes, self.isUIHidden {
+            node.animateIn(buttonFrom: nil, buttonSnapshot: nil, transition: transition)
+        } else {
+            let (buttonFrame, snapshotView) = self.buttonsNode.endButton()
+            let buttonFrom = buttonFrame.flatMap({ frame in
+                self.buttonsNode.view.convert(frame, to: node.view)
+            })
+            node.animateIn(buttonFrom: buttonFrom, buttonSnapshot: snapshotView, transition: transition)
+        }
     }
     
     private var prefetchKeyAnimationDisposable: DisposableSet = DisposableSet()
@@ -1117,8 +1127,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         guard let callState = self.callState else {
             return
         }
+        
         if case .terminating = callState.state {
+            self.toastContent = []
         } else if case .terminated = callState.state {
+            self.toastContent = []
         } else {
             var toastContent: CallControllerToastContent = []
             if case .active = callState.state {
@@ -1510,13 +1523,20 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         var overlayAlpha: CGFloat = min(pinchTransitionAlpha, uiDisplayTransition)
         var statusAlpha: CGFloat = overlayAlpha
+        var buttonsAlpha: CGFloat = overlayAlpha
         var toastAlpha: CGFloat = min(pinchTransitionAlpha, pipTransitionAlpha)
         
         switch self.callState?.state {
-        case .terminated, .terminating:
+        case .terminated:
+            overlayAlpha = 0.0
+            buttonsAlpha = 0.0
+            toastAlpha *= 0.5
+            statusAlpha = 1.0
+        case .terminating:
             overlayAlpha = 0.0
             toastAlpha *= 0.5
             statusAlpha = 1.0
+            buttonsAlpha = 1.0
         default:
             break
         }
@@ -1598,12 +1618,12 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
 
         transition.updateFrame(node: self.buttonsNode, frame: CGRect(origin: CGPoint(x: 0.0, y: buttonsOriginY), size: CGSize(width: layout.size.width, height: buttonsHeight)))
-        transition.updateAlpha(node: self.buttonsNode, alpha: overlayAlpha)
+        transition.updateAlpha(node: self.buttonsNode, alpha: buttonsAlpha)
         
         if let ratingCallNode = self.ratingCallNode {
             let ratingTransiton: ContainedViewLayoutTransition = ratingCallNode.frame.isEmpty ? .immediate : transition
             let horizontalInset: CGFloat = 44.0
-            let availableSize: CGSize = CGSize(width: self.buttonsNode.frame.width - horizontalInset * 2, height: layout.size.height - statusNodeFrame.maxY)
+            let availableSize: CGSize = CGSize(width: self.buttonsNode.frame.width - horizontalInset * 2, height: self.buttonsNode.frame.origin.y - statusNodeFrame.maxY - 16.0)
             let size = ratingCallNode.updateLayout(size: availableSize, transition: .immediate)
             
             ratingTransiton.updateFrame(node: ratingCallNode, frame: CGRect(origin: CGPoint(x: self.buttonsNode.frame.origin.x + horizontalInset, y: self.buttonsNode.frame.origin.y - size.height + 53.0), size: size))
@@ -1633,7 +1653,10 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 self.disableAnimationForExpandedVideoOnce = false
             }
             
-            let animateExpandedIn = expandedVideoNode.frame.isEmpty
+            let animateExpandedFromAvatar = expandedVideoNode.frame.isEmpty && self.outgoingVideoNodeValue == nil
+            if self.outgoingVideoNodeValue == nil {
+                expandedVideoTransition = .immediate
+            }
             if let removedExpandedVideoNodeValue = self.removedExpandedVideoNodeValue {
                 self.removedExpandedVideoNodeValue = nil
                 
@@ -1646,7 +1669,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             
             expandedVideoNode.updateLayout(size: expandedVideoNode.frame.size, cornerRadius: 0.0, isOutgoing: expandedVideoNode === self.outgoingVideoNodeValue, deviceOrientation: mappedDeviceOrientation, isCompactLayout: isCompactLayout, transition: expandedVideoTransition)
             
-            if animateExpandedIn {
+            if animateExpandedFromAvatar {
                 let layerTransition = Transition(transition)
                 let layer = CAShapeLayer()
                 layer.fillColor = UIColor.black.cgColor
@@ -1688,7 +1711,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             if let removedExpandedVideoNodeValue = self.removedExpandedVideoNodeValue {
                 self.removedExpandedVideoNodeValue = nil
                 
-                if transition.isAnimated {
+                if transition.isAnimated, self.incomingVideoNodeValue != nil {
                     let layerTransition = Transition(transition)
                     let shortLayerTransition: Transition = .init(animation: .curve(duration: 0.05, curve: .spring))
                     
@@ -1712,7 +1735,10 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                             self?.videoContainerNode.backgroundColor = prevColor
                         }
                     })
-                    
+                } else if transition.isAnimated {
+                    removedExpandedVideoNodeValue.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.1, delay: 0.2, removeOnCompletion: false, completion: { [weak removedExpandedVideoNodeValue] _ in
+                        removedExpandedVideoNodeValue?.removeFromSupernode()
+                    })
                 } else {
                     removedExpandedVideoNodeValue.removeFromSupernode()
                 }
@@ -1746,8 +1772,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 }
 
                 if minimizedVideoNode.frame.isEmpty {
-                    minimizedVideoNode.frame = previewVideoFrame
-                    minimizedVideoTransition.animateFrame(node: minimizedVideoNode, from: fullscreenVideoFrame, to: previewVideoFrame, removeOnCompletion: false)
+                    let scaleFactor = fullscreenVideoFrame.width / previewVideoFrame.width
+                    minimizedVideoTransition.animateTransformScale(layer: minimizedVideoNode.layer, from: CGPoint(x: scaleFactor, y: scaleFactor))
+                    minimizedVideoTransition.animatePosition(layer: minimizedVideoNode.layer, from: fullscreenVideoFrame.center, to: previewVideoFrame.center)
+                    minimizedVideoTransition = .immediate
+                    minimizedVideoTransition.updateFrame(node: minimizedVideoNode, frame: previewVideoFrame)
                 } else {
                     minimizedVideoTransition.updateFrame(node: minimizedVideoNode, frame: previewVideoFrame)
                 }
@@ -1817,7 +1846,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             // TODO: move strings to localization
             let titleText = "This call is end-to end encrypted"
             let buttonText = "OK"
-            let keyPreviewNode = ContestCallControllerKeyPreviewNode(context: self.accountContext, keyText: keyText, titleText: titleText, infoText: self.presentationData.strings.Call_EmojiDescription(EnginePeer(peer).compactDisplayTitle).string.replacingOccurrences(of: "%%", with: "%"), buttonText: buttonText, light: self.incomingVideoNodeValue == nil, dismiss: { [weak self] in
+            let keyPreviewNode = ContestCallControllerKeyPreviewNode(context: self.accountContext, keyText: keyText, titleText: titleText, infoText: self.presentationData.strings.Call_EmojiDescription(EnginePeer(peer).compactDisplayTitle).string.replacingOccurrences(of: "%%", with: "%"), buttonText: buttonText, light: self.incomingVideoNodeValue == nil && self.outgoingVideoNodeValue == nil, dismiss: { [weak self] in
                 if let _ = self?.keyPreviewNode {
                     self?.backPressed()
                 }
