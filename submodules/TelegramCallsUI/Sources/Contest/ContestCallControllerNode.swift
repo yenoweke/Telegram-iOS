@@ -122,6 +122,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var minimizedVideoNode: CallVideoNode?
     private var disableAnimationForExpandedVideoOnce: Bool = false
     private var animationForExpandedVideoSnapshotView: UIView? = nil
+    private var animationForMinimizedVideoSnapshotView: UIView? = nil
     
     private var outgoingVideoNodeCorner: VideoNodeCorner = .bottomRight
     private let backButtonArrowNode: ASImageNode
@@ -1581,11 +1582,13 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         let compactStatusNode = self.incomingVideoNodeValue != nil || self.outgoingVideoNodeValue != nil
         let statusOffset: CGFloat = speakingContainerFrame.maxY + 40.0
         let statusHeight = self.statusNode.updateLayout(constrainedWidth: layout.size.width, compact: compactStatusNode, transition: transition)
+        let statusNodeFrame: CGRect
         if compactStatusNode {
-            transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(x: 0.0, y: self.backButtonNode.frame.maxY + 20.0), size: CGSize(width: layout.size.width, height: statusHeight)))
+            statusNodeFrame = CGRect(origin: CGPoint(x: 0.0, y: self.backButtonNode.frame.maxY + 20.0), size: CGSize(width: layout.size.width, height: statusHeight))
         } else {
-            transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(x: 0.0, y: statusOffset), size: CGSize(width: layout.size.width, height: statusHeight)))
+            statusNodeFrame = CGRect(origin: CGPoint(x: 0.0, y: statusOffset), size: CGSize(width: layout.size.width, height: statusHeight))
         }
+        transition.updateFrame(node: self.statusNode, frame: statusNodeFrame)
         transition.updateAlpha(node: self.statusNode, alpha: statusAlpha)
         
         if toastHeight > .leastNormalMagnitude {
@@ -1600,7 +1603,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         if let ratingCallNode = self.ratingCallNode {
             let ratingTransiton: ContainedViewLayoutTransition = ratingCallNode.frame.isEmpty ? .immediate : transition
             let horizontalInset: CGFloat = 44.0
-            let size = ratingCallNode.updateLayout(size: CGSize(width: self.buttonsNode.frame.width - horizontalInset * 2, height: .infinity), transition: .immediate)
+            let availableSize: CGSize = CGSize(width: self.buttonsNode.frame.width - horizontalInset * 2, height: layout.size.height - statusNodeFrame.maxY)
+            let size = ratingCallNode.updateLayout(size: availableSize, transition: .immediate)
             
             ratingTransiton.updateFrame(node: ratingCallNode, frame: CGRect(origin: CGPoint(x: self.buttonsNode.frame.origin.x + horizontalInset, y: self.buttonsNode.frame.origin.y - size.height + 53.0), size: size))
         }
@@ -1720,17 +1724,26 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             transition.updateAlpha(node: minimizedVideoNode, alpha: min(pipTransitionAlpha, pinchTransitionAlpha))
             var minimizedVideoTransition = transition
             if self.minimizedVideoDraggingPosition == nil {
-                // TODO: remove it and animationForExpandedVideoSnapshotView related things
-//                if let animationForExpandedVideoSnapshotView = self.animationForExpandedVideoSnapshotView {
-//                    self.containerNode.view.addSubview(animationForExpandedVideoSnapshotView)
-//                    transition.updateAlpha(layer: animationForExpandedVideoSnapshotView.layer, alpha: 0.0, completion: { [weak animationForExpandedVideoSnapshotView] _ in
-//                        animationForExpandedVideoSnapshotView?.removeFromSuperview()
-//                    })
-//                    transition.updateTransformScale(layer: animationForExpandedVideoSnapshotView.layer, scale: previewVideoFrame.width / fullscreenVideoFrame.width)
-//
-//                    transition.updatePosition(layer: animationForExpandedVideoSnapshotView.layer, position: CGPoint(x: previewVideoFrame.minX + previewVideoFrame.center.x /  fullscreenVideoFrame.width * previewVideoFrame.width, y: previewVideoFrame.minY + previewVideoFrame.center.y / fullscreenVideoFrame.height * previewVideoFrame.height))
-//                    self.animationForExpandedVideoSnapshotView = nil
-//                }
+                
+                if let animationForExpandedVideoSnapshotView = self.animationForExpandedVideoSnapshotView {
+                    self.containerNode.view.insertSubview(animationForExpandedVideoSnapshotView, aboveSubview: self.videoContainerNode.view)
+
+                    transition.updateAlpha(layer: animationForExpandedVideoSnapshotView.layer, alpha: 0.0, completion: { [weak animationForExpandedVideoSnapshotView] _ in
+                        animationForExpandedVideoSnapshotView?.removeFromSuperview()
+                    })
+                    self.animationForExpandedVideoSnapshotView = nil
+                    minimizedVideoTransition = .immediate
+                }
+                
+                if let animationForMinimizedVideoSnapshotView = self.animationForMinimizedVideoSnapshotView {
+                    self.containerNode.view.insertSubview(animationForMinimizedVideoSnapshotView, aboveSubview: self.videoContainerNode.view)
+                    
+                    transition.updateAlpha(layer: animationForMinimizedVideoSnapshotView.layer, alpha: 0.0, completion: { [weak animationForMinimizedVideoSnapshotView] _ in
+                        animationForMinimizedVideoSnapshotView?.removeFromSuperview()
+                    })
+                    self.animationForMinimizedVideoSnapshotView = nil
+                    minimizedVideoTransition = .immediate
+                }
 
                 if minimizedVideoNode.frame.isEmpty {
                     minimizedVideoNode.frame = previewVideoFrame
@@ -1873,8 +1886,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                     let point = recognizer.location(in: recognizer.view)
                     if let expandedVideoNode = self.expandedVideoNode, let minimizedVideoNode = self.minimizedVideoNode, minimizedVideoNode.frame.contains(point) {
                         if !self.areUserActionsDisabledNow() {
-                            let copyView = minimizedVideoNode.view.snapshotView(afterScreenUpdates: false)
-                            copyView?.frame = minimizedVideoNode.frame
+                            let minimizedCopyView = minimizedVideoNode.view.snapshotView(afterScreenUpdates: false)
+                            minimizedCopyView?.frame = minimizedVideoNode.frame
+                            let expandedCopyView = expandedVideoNode.view.snapshotView(afterScreenUpdates: false)
+                            expandedCopyView?.frame = expandedVideoNode.frame
+
                             self.expandedVideoNode = minimizedVideoNode
                             self.minimizedVideoNode = expandedVideoNode
                             if let supernode = expandedVideoNode.supernode {
@@ -1883,7 +1899,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                             self.disableActionsUntilTimestamp = CACurrentMediaTime() + 0.3
                             if let (layout, navigationBarHeight) = self.validLayout {
                                 self.disableAnimationForExpandedVideoOnce = true
-                                self.animationForExpandedVideoSnapshotView = copyView
+                                self.animationForExpandedVideoSnapshotView = minimizedCopyView
+                                self.animationForMinimizedVideoSnapshotView = expandedCopyView
                                 self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .animated(duration: 0.3, curve: .easeInOut))
                             }
                         }

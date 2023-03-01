@@ -201,7 +201,12 @@ final class ContestCallRatingNode: ASDisplayNode {
         transition.updateFrame(node: self.contentNode, frame: CGRect(origin: .zero, size: contentSize))
         transition.updateFrame(view: self.contentEffectView, frame: CGRect(origin: .zero, size: contentSize))
         
-        let spaceAfterContent: CGFloat = 66.0
+        let spaceAfterContent: CGFloat
+        if size.height > contentSize.height + 66.0 + actionButtonHeight {
+            spaceAfterContent = 66.0
+        } else {
+            spaceAfterContent = 24.0
+        }
         let actionNodeFrame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + spaceAfterContent), size: CGSize(width: size.width, height: actionButtonHeight))
         transition.updateFrame(node: self.actionNode, frame: actionNodeFrame)
         self.actionNode.layer.cornerRadius = buttonCornerRadius
