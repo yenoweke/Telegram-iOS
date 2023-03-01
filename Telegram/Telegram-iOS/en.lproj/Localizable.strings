@@ -2326,6 +2326,10 @@ Unused sets are archived when you add more.";
 "Calls.RatingTitle" = "Please rate the quality\nof your Telegram call";
 "Calls.SubmitRating" = "Submit";
 
+"Calls.ContestRatingTitle" = "Rate this call";
+"Calls.ContestRatingSubtitle" = "Please rate the quality of this call.";
+"Calls.ContestWeakNetwork" = "Weak network signal";
+
 "Call.Seconds_1" = "%@ second";
 "Call.Seconds_2" = "%@ seconds";
 "Call.Seconds_3_10" = "%@ seconds";

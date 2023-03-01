@@ -100,7 +100,8 @@ func generateContentImage(contentImage: CallControllerButtonItemNode.Content.Ima
     case .headphones:
         image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallHeadphonesButton"), color: imageColor)
     case .accept:
-        image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallAcceptButton"), color: imageColor)
+        let imageName = forContest ? "Call/ContestCallAcceptButton" : "Call/CallAcceptButton"
+        image = generateTintedImage(image: UIImage(bundleImageName: imageName), color: imageColor)
     case .end:
         image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallDeclineButton"), color: imageColor)
     case .cancel(let imageSize):

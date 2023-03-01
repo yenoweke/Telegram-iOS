@@ -132,6 +132,8 @@ public final class PresentationCallVideoView {
 }
 
 public protocol PresentationCall: AnyObject {
+    var useContestUI: Bool { get }
+    
     var context: AccountContext { get }
     var isIntegratedWithCallKit: Bool { get }
     var internalId: CallSessionInternalId { get }
@@ -149,6 +151,8 @@ public protocol PresentationCall: AnyObject {
     var audioOutputState: Signal<([AudioSessionOutput], AudioSessionOutput?), NoError> { get }
     
     var canBeRemoved: Signal<Bool, NoError> { get }
+
+    func removeIfNeeded(immediately: Bool)
     
     func answer()
     func hangUp() -> Signal<Bool, NoError>

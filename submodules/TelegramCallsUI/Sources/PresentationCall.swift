@@ -16,6 +16,9 @@ import DeviceProximity
 import PhoneNumberFormat
 
 public final class PresentationCallImpl: PresentationCall {
+    public var useContestUI: Bool {
+        true
+    }
     public let context: AccountContext
     private let audioSession: ManagedAudioSession
     private let callSessionManager: CallSessionManager
@@ -490,8 +493,9 @@ public final class PresentationCallImpl: PresentationCall {
                 presentationState = PresentationCallState(state: .connecting(nil), videoState: mappedVideoState, remoteVideoState: mappedRemoteVideoState, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
             case let .dropping(reason):
                 presentationState = PresentationCallState(state: .terminating(reason), videoState: mappedVideoState, remoteVideoState: .inactive, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
-            case let .terminated(id, reason, options):
-                presentationState = PresentationCallState(state: .terminated(id, reason, self.callWasActive && (options.contains(.reportRating) || self.shouldPresentCallRating)), videoState: mappedVideoState, remoteVideoState: .inactive, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
+            case let .terminated(id, reason, _):
+                let reportRating = true //self.callWasActive && (options.contains(.reportRating) || self.shouldPresentCallRating)
+                presentationState = PresentationCallState(state: .terminated(id, reason, reportRating), videoState: mappedVideoState, remoteVideoState: .inactive, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
             case let .requesting(ringing):
                 presentationState = PresentationCallState(state: .requesting(ringing), videoState: mappedVideoState, remoteVideoState: mappedRemoteVideoState, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)
             case let .active(_, _, keyVisualHash, _, _, _, _):
@@ -633,7 +637,12 @@ public final class PresentationCallImpl: PresentationCall {
         if terminating, !wasTerminated {
             if !self.didSetCanBeRemoved {
                 self.didSetCanBeRemoved = true
-                self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
+                
+                if self.useContestUI, let presentationCallState = presentationState?.state, case PresentationCallState.State.terminated(_, _, true) = presentationCallState {
+                    self.canBeRemovedPromise.set(.single(true) |> delay(8.0, queue: Queue.mainQueue()))
+                } else {
+                    self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
+                }
             }
             self.hungUpPromise.set(true)
             if sessionState.isOutgoing {
@@ -714,6 +723,14 @@ public final class PresentationCallImpl: PresentationCall {
             self.isAudioSessionActive = value
         }
         self.sharedAudioDevice?.setIsAudioSessionActive(value)
+    }
+    
+    public func removeIfNeeded(immediately: Bool) {
+        if immediately {
+            self.canBeRemovedPromise.set(.single(true) |> delay(0.1, queue: Queue.mainQueue()))
+        } else {
+            self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
+        }
     }
     
     public func answer() {

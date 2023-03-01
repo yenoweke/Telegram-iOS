@@ -44,6 +44,12 @@ final class ContestCallControllerButtonsNode: ASDisplayNode, CallControllerButto
         return self.buttonNodes[.enableCamera]?.frame
     }
     
+    func endButton() -> (frame: CGRect?, snapshotView: UIView?)  {
+        let node = self.buttonNodes[.acceptOrEnd] ?? self.buttonNodes[.decline]
+        let snapshotView = node?.view.snapshotView(afterScreenUpdates: false)
+        return (frame: node?.frame, snapshotView: snapshotView)
+    }
+
     private func updateButtonsLayout(strings: PresentationStrings, mode: CallControllerButtonsMode, width: CGFloat, bottomInset: CGFloat, animated: Bool) -> CGFloat {
         let transition: ContainedViewLayoutTransition
         if animated {

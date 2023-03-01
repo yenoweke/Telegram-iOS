@@ -14,6 +14,12 @@ import TelegramNotices
 import AppBundle
 import TooltipUI
 
+struct RatingSelectedItem {
+    let rating: Int
+    let isVideo: Bool
+    let callId: CallId
+}
+
 protocol CallControllerNodeProtocol: AnyObject {
     var isMuted: Bool { get set }
     
@@ -28,6 +34,8 @@ protocol CallControllerNodeProtocol: AnyObject {
     var callEnded: ((Bool) -> Void)? { get set }
     var dismissedInteractively: (() -> Void)? { get set }
     var dismissAllTooltips: (() -> Void)? { get set }
+    var ratingSelected: ((RatingSelectedItem) -> Void)? { get set }
+    var ratingDissmiss: (() -> Void)? { get set }
     
     func updateAudioOutputs(availableOutputs: [AudioSessionOutput], currentOutput: AudioSessionOutput?)
     func updateCallState(_ callState: PresentationCallState)
@@ -137,8 +145,7 @@ public final class CallController: ViewController {
     override public func loadDisplayNode() {
         Logger.shared.logToConsole = true
 
-        let useContestUI = self.call.isOutgoing
-        if useContestUI {
+        if self.call.useContestUI {
             self.displayNode = ContestCallControllerNode(accountContext: self.accountContext, sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
             //            self.displayNode = ContestCallContainerNode(presentationData: self.presentationData)
         } else if self.call.isVideoPossible {
@@ -256,6 +263,26 @@ public final class CallController: ViewController {
                     strongSelf.present(controller, in: .window(.root))
                 })
             }
+        }
+        
+        let ratingDismiss: ((Bool) -> Void)? = { [weak self] immediately in
+            self?.call.removeIfNeeded(immediately: immediately)
+        }
+        self.controllerNode.ratingSelected = { [weak self] rating in
+            ratingDismiss?(false)
+            guard let strongSelf = self else {
+                return
+            }
+            if rating.rating < 4 {
+                // FIXME: it looks like a bug (saved logic from presentCallRating)
+                strongSelf.push(callFeedbackController(sharedContext: strongSelf.sharedContext, account: strongSelf.account, callId: rating.callId, rating: rating.rating, userInitiated: false, isVideo: rating.isVideo))
+            } else {
+                let _ = rateCallAndSendLogs(engine: TelegramEngine(account: strongSelf.account), callId: rating.callId, starsCount: rating.rating, comment: "", userInitiated: false, includeLogs: false).start()
+            }
+        }
+
+        self.controllerNode.ratingDissmiss = {
+            ratingDismiss?(true)
         }
         
         self.controllerNode.present = { [weak self] controller in

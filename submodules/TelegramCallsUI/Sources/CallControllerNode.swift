@@ -358,7 +358,9 @@ final class CallVideoNode: ASDisplayNode, PreviewVideoNode {
 }
 
 final class CallControllerNode: ViewControllerTracingNode, CallControllerNodeProtocol {
-    
+    var ratingSelected: ((RatingSelectedItem) -> Void)?
+    var ratingDissmiss: (() -> Void)?
+
     private enum VideoNodeCorner {
         case topLeft
         case topRight

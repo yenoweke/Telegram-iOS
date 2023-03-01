@@ -23,6 +23,10 @@ import AudioBlob
 import EmojiTextAttachmentView
 import ComponentFlow
 
+func ddlog(_ what: @autoclosure () -> String) {
+    Logger.shared.log("ContestCalls", what())
+}
+
 private let white = UIColor(rgb: 0xffffff)
 private let initiatingGradients: [UIColor] = [UIColor(hexString: "#5295D6"), UIColor(hexString: "#616AD5"), UIColor(hexString: "#AC65D4"), UIColor(hexString: "#7261DA")].compactMap { $0 }
 private let weakSignalGradients: [UIColor] = [UIColor(hexString: "#B84498"), UIColor(hexString: "#F4992E"), UIColor(hexString: "#C94986"), UIColor(hexString: "#FF7E46")].compactMap { $0 }
@@ -78,7 +82,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var presentationData: PresentationData
     private var peer: Peer?
     private let debugInfo: Signal<(String, String), NoError>
-    private var forceReportRating = false
+    private var forceReportRating = true
     private let easyDebugAccess: Bool
     private let call: PresentationCall
     
@@ -124,8 +128,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private let backButtonNode: HighlightableButtonNode
     private let statusNode: ContestCallControllerStatusNode
     private let toastNode: ContestCallControllerToastContainerNode
-    private let buttonsNode: CallControllerButtonsNodeProtocol
+    private let buttonsNode: ContestCallControllerButtonsNode
     private var keyPreviewNode: ContestCallControllerKeyPreviewNode?
+    private var ratingCallNode: ContestCallRatingNode?
     
     private var debugNode: CallDebugNode?
     
@@ -151,6 +156,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     
     private var audioOutputState: ([AudioSessionOutput], currentOutput: AudioSessionOutput?)?
     private var callState: PresentationCallState?
+    
+    var ratingSelected: ((RatingSelectedItem) -> Void)?
+    var ratingDissmiss: (() -> Void)?
     
     var toggleMute: (() -> Void)?
     var setCurrentAudioOutput: ((AudioSessionOutput) -> Void)?
@@ -242,7 +250,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.backButtonNode = HighlightableButtonNode()
         self.backButtonNode.alpha = 0.0
         
-        self.statusNode = ContestCallControllerStatusNode()
+        self.statusNode = ContestCallControllerStatusNode(weakNetworkText: presentationData.strings.Calls_ContestWeakNetwork)
         
         self.gradientBackgroundNode = createGradientBackgroundNode(colors: initiatingGradients)
         self.gradientEffectView = makeVisualEffectForGradient()
@@ -629,7 +637,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     func updateCallState(_ callState: PresentationCallState) {
         self.callState = callState
         
-        let statusValue: CallControllerStatusValue
+        var statusTitle: String? = nil
+        let statusValue: ContestCallControllerStatusValue
         var statusReception: Int32?
         
         switch callState.remoteVideoState {
@@ -839,24 +848,28 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 
         switch callState.state {
             case .waiting, .connecting:
-                statusValue = .text(string: self.presentationData.strings.Call_StatusConnecting, displayLogo: false)
+                statusValue = .text(string: self.presentationData.strings.Call_StatusConnecting, image: nil)
             case let .requesting(ringing):
                 if ringing {
-                    statusValue = .text(string: self.presentationData.strings.Call_StatusRinging, displayLogo: false)
+                    statusValue = .text(string: self.presentationData.strings.Call_StatusRinging, image: nil)
                 } else {
-                    statusValue = .text(string: self.presentationData.strings.Call_StatusRequesting, displayLogo: false)
+                    statusValue = .text(string: self.presentationData.strings.Call_StatusRequesting, image: nil)
                 }
             case .terminating:
-                statusValue = .text(string: self.presentationData.strings.Call_StatusEnded, displayLogo: false)
+                self.updateGradient(colors: initiatingGradients)
+                statusValue = .text(string: self.statusNode.lastPrintedTime, image: .callEnd)
+                statusTitle = self.presentationData.strings.Call_StatusEnded
             case let .terminated(_, reason, _):
+                self.updateGradient(colors: initiatingGradients)
                 if let reason = reason {
                     switch reason {
                         case let .ended(type):
                             switch type {
                                 case .busy:
-                                    statusValue = .text(string: self.presentationData.strings.Call_StatusBusy, displayLogo: false)
+                                    statusValue = .text(string: self.presentationData.strings.Call_StatusBusy, image: nil)
                                 case .hungUp, .missed:
-                                    statusValue = .text(string: self.presentationData.strings.Call_StatusEnded, displayLogo: false)
+                                    statusTitle = self.presentationData.strings.Call_StatusEnded
+                                    statusValue = .text(string: self.statusNode.lastPrintedTime, image: .callEnd)
                             }
                         case let .error(error):
                             let text = self.presentationData.strings.Call_StatusFailed
@@ -878,10 +891,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                             default:
                                 break
                             }
-                            statusValue = .text(string: text, displayLogo: false)
+                            statusValue = .text(string: text, image: nil)
                     }
                 } else {
-                    statusValue = .text(string: self.presentationData.strings.Call_StatusEnded, displayLogo: false)
+                    statusValue = .text(string: self.statusNode.lastPrintedTime, image: .callEnd)
+                    statusTitle = self.presentationData.strings.Call_StatusEnded
                 }
             case .ringing:
                 var text: String
@@ -893,7 +907,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 if !self.statusNode.subtitle.isEmpty {
                     text += "\n\(self.statusNode.subtitle)"
                 }
-                statusValue = .text(string: text, displayLogo: false)
+                statusValue = .text(string: text, image: nil)
             case .active(let timestamp, let reception, let keyVisualHash), .reconnecting(let timestamp, let reception, let keyVisualHash):
                 if self.keyTextData?.0 != keyVisualHash {
                     let text = stringForEmojiHashOfData(keyVisualHash, 4)!
@@ -935,6 +949,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                     break
             }
         }
+        if let statusTitle = statusTitle {
+            self.statusNode.title = statusTitle
+        }
         self.statusNode.status = statusValue
         self.statusNode.reception = statusReception
         
@@ -967,7 +984,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         if case let .terminated(id, _, reportRating) = callState.state, let callId = id {
             let presentRating = reportRating || self.forceReportRating
             if presentRating {
-                self.presentCallRating?(callId, self.call.isVideo)
+                self.showCallRating(callId, self.call.isVideo)
             }
             self.callEnded?(presentRating)
         }
@@ -976,6 +993,29 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.videoContainerNode.isPinchGestureEnabled = hasIncomingVideoNode
     }
     
+    private func showCallRating(_ callId: CallId, _ isVideo: Bool, transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .easeInOut)) {
+        
+        self.audioLevelView?.stopAnimating(duration: 0.2)
+        
+        let node = ContestCallRatingNode(strings: self.presentationData.strings, dismiss: { [weak self] in
+            self?.ratingDissmiss?()
+        }, apply: { [weak self] rating in
+            self?.ratingSelected?(RatingSelectedItem(rating: rating, isVideo: isVideo, callId: callId))
+        })
+        self.addSubnode(node)
+        
+        self.ratingCallNode = node
+        
+        if let (layout, navigationHeight) = self.validLayout {
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: transition)
+        }
+        
+        let (buttonFrame, snapshotView) = self.buttonsNode.endButton()
+        let buttonFrom = buttonFrame.flatMap({ frame in
+            self.buttonsNode.view.convert(frame, to: node.view)
+        })
+        node.animateIn(buttonFrom: buttonFrom, buttonSnapshot: snapshotView, transition: transition)
+    }
     
     private var prefetchKeyAnimationDisposable: DisposableSet = DisposableSet()
     private func prefetchKeyAnimationFiles(_ text: String) {
@@ -1002,7 +1042,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.onEstablishedAnimationAppeared = true
         self.animateAvatar()
 
-        
         let offset: CGFloat = 120.0
         var arrowFrom = self.backButtonArrowNode.frame
         arrowFrom.origin.x += offset
@@ -1469,12 +1508,14 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         let toastOriginY = interpolate(from: toastCollapsedOriginY, to: defaultButtonsOriginY - toastSpacing - toastHeight, value: uiDisplayTransition)
         
         var overlayAlpha: CGFloat = min(pinchTransitionAlpha, uiDisplayTransition)
+        var statusAlpha: CGFloat = overlayAlpha
         var toastAlpha: CGFloat = min(pinchTransitionAlpha, pipTransitionAlpha)
         
         switch self.callState?.state {
         case .terminated, .terminating:
-            overlayAlpha *= 0.5
+            overlayAlpha = 0.0
             toastAlpha *= 0.5
+            statusAlpha = 1.0
         default:
             break
         }
@@ -1528,7 +1569,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         if let image = self.backButtonArrowNode.image {
             transition.updateFrame(node: self.backButtonArrowNode, frame: CGRect(origin: CGPoint(x: 10.0, y: topOriginY + 24.0), size: image.size))
         }
-        transition.updateFrame(node: self.backButtonNode, frame: CGRect(origin: CGPoint(x: 29.0, y: topOriginY + 22.0), size: backSize))
+        transition.updateFrame(node: self.backButtonNode, frame: CGRect(origin: CGPoint(x: 29.0, y: topOriginY + 24.0), size: backSize))
         
         if onEstablishedAnimationAppeared {
             transition.updateAlpha(node: self.backButtonArrowNode, alpha: overlayAlpha)
@@ -1545,8 +1586,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         } else {
             transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(x: 0.0, y: statusOffset), size: CGSize(width: layout.size.width, height: statusHeight)))
         }
-        transition.updateAlpha(node: self.statusNode, alpha: overlayAlpha)
-        
+        transition.updateAlpha(node: self.statusNode, alpha: statusAlpha)
         
         if toastHeight > .leastNormalMagnitude {
             transition.updateFrame(node: self.toastNode, frame: CGRect(origin: CGPoint(x: 0.0, y: toastOriginY), size: CGSize(width: layout.size.width, height: toastHeight)))
@@ -1557,6 +1597,14 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         transition.updateFrame(node: self.buttonsNode, frame: CGRect(origin: CGPoint(x: 0.0, y: buttonsOriginY), size: CGSize(width: layout.size.width, height: buttonsHeight)))
         transition.updateAlpha(node: self.buttonsNode, alpha: overlayAlpha)
         
+        if let ratingCallNode = self.ratingCallNode {
+            let ratingTransiton: ContainedViewLayoutTransition = ratingCallNode.frame.isEmpty ? .immediate : transition
+            let horizontalInset: CGFloat = 44.0
+            let size = ratingCallNode.updateLayout(size: CGSize(width: self.buttonsNode.frame.width - horizontalInset * 2, height: .infinity), transition: .immediate)
+            
+            ratingTransiton.updateFrame(node: ratingCallNode, frame: CGRect(origin: CGPoint(x: self.buttonsNode.frame.origin.x + horizontalInset, y: self.buttonsNode.frame.origin.y - size.height + 53.0), size: size))
+        }
+
         let fullscreenVideoFrame = containerFullScreenFrame
         let previewVideoFrame = self.calculatePreviewVideoRect(layout: layout, navigationHeight: navigationBarHeight)
         
@@ -1699,7 +1747,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
         
         let keyTextSize = self.keyButtonNode.frame.size
-        transition.updateFrame(node: self.keyButtonNode, frame: CGRect(origin: CGPoint(x: layout.size.width - keyTextSize.width - 8.0, y: topOriginY + 19.0), size: keyTextSize))
+        transition.updateFrame(node: self.keyButtonNode, frame: CGRect(origin: CGPoint(x: layout.size.width - keyTextSize.width - 8.0, y: topOriginY + 21.0), size: keyTextSize))
         transition.updateAlpha(node: self.keyButtonNode, alpha: overlayAlpha)
         
         if let debugNode = self.debugNode {
@@ -2016,6 +2064,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     }
     
     @objc private func panGesture(_ recognizer: CallPanGestureRecognizer) {
+        guard self.ratingCallNode == nil else {
+            return
+        }
         switch recognizer.state {
             case .began:
                 guard let location = recognizer.firstLocation else {
@@ -2143,10 +2194,17 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 break
         }
     }
-    
+
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         if self.debugNode != nil {
             return super.hitTest(point, with: event)
+        }
+        if let ratingCallNode = self.ratingCallNode {
+            if ratingCallNode.frame.contains(point) == true {
+                return super.hitTest(point, with: event)
+            } else {
+                return nil
+            }
         }
         if self.containerTransformationNode.frame.contains(point) {
             return self.containerTransformationNode.view.hitTest(self.view.convert(point, to: self.containerTransformationNode.view), with: event)

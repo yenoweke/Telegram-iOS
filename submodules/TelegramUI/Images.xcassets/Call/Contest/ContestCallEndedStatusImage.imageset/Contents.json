@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "ic_contest_call_ended.pdf",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

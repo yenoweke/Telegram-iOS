@@ -14,7 +14,9 @@ import PhotoResources
 import CallsEmoji
 
 final class LegacyCallControllerNode: ASDisplayNode, CallControllerNodeProtocol {
-    
+    var ratingSelected: ((RatingSelectedItem) -> Void)?
+    var ratingDissmiss: (() -> Void)?
+
     private let sharedContext: SharedAccountContext
     private let account: Account
     

@@ -76,7 +76,7 @@ enum ButtonDescription: Equatable {
         case .accept:
             return .acceptOrEnd
         case let .end(type):
-            if type == .decline {
+            if type == .decline || type == .cancel {
                 return .decline
             } else {
                 return .acceptOrEnd
