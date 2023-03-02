@@ -1366,19 +1366,19 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private func calculatePreviewVideoRect(layout: ContainerViewLayout, navigationHeight: CGFloat) -> CGRect {
         let buttonsHeight: CGFloat = self.buttonsNode.bounds.height
         let toastHeight: CGFloat = self.toastNode.bounds.height
-        let toastInset = (toastHeight > 0.0 ? toastHeight + 22.0 : 0.0)
+        let toastInset = (toastHeight > 0.0 ? toastHeight + 16.0 : 0.0)
         
         var fullInsets = layout.insets(options: .statusBar)
     
         var cleanInsets = fullInsets
-        cleanInsets.bottom = max(layout.intrinsicInsets.bottom, 20.0) + toastInset
-        cleanInsets.left = 20.0
-        cleanInsets.right = 20.0
+        cleanInsets.bottom = max(layout.intrinsicInsets.bottom, 16.0) + toastInset
+        cleanInsets.left = 10.0
+        cleanInsets.right = 10.0
         
         fullInsets.top += 44.0 + 8.0
-        fullInsets.bottom = buttonsHeight + 22.0 + toastInset
-        fullInsets.left = 20.0
-        fullInsets.right = 20.0
+        fullInsets.bottom = buttonsHeight + 16.0 + toastInset
+        fullInsets.left = 10.0
+        fullInsets.right = 10.0
         
         var insets: UIEdgeInsets = self.isUIHidden ? cleanInsets : fullInsets
         
@@ -1389,7 +1389,12 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         insets.left = interpolate(from: expandedInset, to: insets.left, value: 1.0 - self.pictureInPictureTransitionFraction)
         insets.right = interpolate(from: expandedInset, to: insets.right, value: 1.0 - self.pictureInPictureTransitionFraction)
         
-        let previewVideoSide = interpolate(from: 300.0, to: 150.0, value: 1.0 - self.pictureInPictureTransitionFraction)
+        let previewVideoSide: CGFloat
+        if self.isUIHidden {
+            previewVideoSide = interpolate(from: 300.0, to: 140.0, value: 1.0 - self.pictureInPictureTransitionFraction)
+        } else {
+            previewVideoSide = interpolate(from: 300.0, to: 240.0, value: 1.0 - self.pictureInPictureTransitionFraction)
+        }
         var previewVideoSize = layout.size.aspectFitted(CGSize(width: previewVideoSide, height: previewVideoSide))
         previewVideoSize = CGSize(width: 30.0, height: 45.0).aspectFitted(previewVideoSize)
         if let minimizedVideoNode = self.minimizedVideoNode {
