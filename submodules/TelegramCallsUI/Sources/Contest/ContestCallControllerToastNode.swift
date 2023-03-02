@@ -46,9 +46,17 @@ final class ContestCallControllerToastContainerNode: ASDisplayNode {
     private var content: CallControllerToastContent?
     private var appliedContent: CallControllerToastContent?
     var title: String = ""
+    var light: Bool {
+        didSet {
+            for node in self.toastNodes.values {
+                node.light = self.light
+            }
+        }
+    }
     
-    init(strings: PresentationStrings) {
+    init(strings: PresentationStrings, light: Bool) {
         self.strings = strings
+        self.light = light
         
         super.init()
     }
@@ -91,7 +99,7 @@ final class ContestCallControllerToastContainerNode: ASDisplayNode {
             if let current = self.toastNodes[toast.key] {
                 toastNode = current
             } else {
-                toastNode = CallControllerToastItemNode()
+                toastNode = CallControllerToastItemNode(light: self.light)
                 self.toastNodes[toast.key] = toastNode
                 self.addSubnode(toastNode)
                 self.visibleToastNodes.append(toastNode)
@@ -198,26 +206,34 @@ private class CallControllerToastItemNode: ASDisplayNode {
     
     let clipNode: ASDisplayNode
     let effectView: UIVisualEffectView
-    let iconNode: ASImageNode
     let textNode: ImmediateTextNode
     
     private(set) var currentContent: Content?
     private(set) var currentWidth: CGFloat?
     private(set) var currentHeight: CGFloat?
+    var light: Bool {
+        didSet {
+            self.updateEffect()
+        }
+    }
     
-    override init() {
+    private func updateEffect() {
+        if #available(iOS 13.0, *) {
+            self.effectView.effect = UIBlurEffect(style: self.light ? .systemMaterialLight : .systemThinMaterialDark)
+            self.effectView.alpha = self.light ? 0.3 : 0.6
+        } else {
+            self.effectView.effect = UIBlurEffect(style: self.light ? .light : .dark)
+        }
+    }
+    
+    init(light: Bool) {
+        self.light = light
         self.clipNode = ASDisplayNode()
         self.clipNode.clipsToBounds = true
         self.clipNode.layer.cornerRadius = 14.0
         
         self.effectView = UIVisualEffectView()
-        self.effectView.effect = UIBlurEffect(style: .light)
         self.effectView.isUserInteractionEnabled = false
-        
-        self.iconNode = ASImageNode()
-        self.iconNode.displaysAsynchronously = false
-        self.iconNode.displayWithoutProcessing = true
-        self.iconNode.contentMode = .center
         
         self.textNode = ImmediateTextNode()
         self.textNode.maximumNumberOfLines = 2
@@ -228,7 +244,6 @@ private class CallControllerToastItemNode: ASDisplayNode {
         
         self.addSubnode(self.clipNode)
         self.clipNode.view.addSubview(self.effectView)
-        self.clipNode.addSubnode(self.iconNode)
         self.clipNode.addSubnode(self.textNode)
     }
     
@@ -249,43 +264,22 @@ private class CallControllerToastItemNode: ASDisplayNode {
         if self.currentContent != content || self.currentWidth != width {
             self.currentContent = content
             self.currentWidth = width
-            
-            var image: UIImage?
-            switch content.image {
-                case .camera:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallToastCamera"), color: .white)
-                case .microphone:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallToastMicrophone"), color: .white)
-                case .battery:
-                    image = generateTintedImage(image: UIImage(bundleImageName: "Call/CallToastBattery"), color: .white)
-            }
-            
-            if transition.isAnimated, let image = image, let previousContent = self.iconNode.image {
-                self.iconNode.image = image
-                self.iconNode.layer.animate(from: previousContent.cgImage!, to: image.cgImage!, keyPath: "contents", timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue, duration: 0.2)
-            } else {
-                self.iconNode.image = image
-            }
                   
             self.textNode.attributedText = NSAttributedString(string: content.text, font: font, textColor: .white)
             
-            let iconSize = CGSize(width: 44.0, height: 28.0)
-            let iconSpacing: CGFloat = isNarrowScreen ? 0.0 : 1.0
-            let textSize = self.textNode.updateLayout(CGSize(width: width - inset * 2.0 - iconSize.width - iconSpacing, height: 100.0))
+            let textSize = self.textNode.updateLayout(CGSize(width: width - inset * 2.0, height: 100.0))
             
-            let backgroundSize = CGSize(width: iconSize.width + iconSpacing + textSize.width + 6.0 * 2.0, height: max(28.0, textSize.height + 4.0 * 2.0))
+            let backgroundSize = CGSize(width: textSize.width + 12.0 * 2.0, height: max(30.0, textSize.height + 4.0 * 2.0))
             let backgroundFrame = CGRect(origin: CGPoint(x: floor((width - backgroundSize.width) / 2.0), y: 0.0), size: backgroundSize)
             
-//            self.clipNode.frame = backgroundFrame
-//            self.effectView.frame = CGRect(origin: CGPoint(), size: backgroundFrame.size)
             transition.updateFrame(node: self.clipNode, frame: backgroundFrame)
             transition.updateFrame(view: self.effectView, frame: CGRect(origin: CGPoint(), size: backgroundFrame.size))
-            
-            self.iconNode.frame = CGRect(origin: CGPoint(), size: iconSize)
-            self.textNode.frame = CGRect(origin: CGPoint(x: iconSize.width + iconSpacing, y: topInset), size: textSize)
+
+            self.textNode.frame = CGRect(origin: CGPoint(x: 12.0, y: topInset), size: textSize)
             
             self.currentHeight = backgroundSize.height
         }
+        self.updateEffect()
         return self.currentHeight ?? 28.0
     }
     

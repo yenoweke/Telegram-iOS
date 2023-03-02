@@ -22,11 +22,13 @@ import GraphCore
 import AudioBlob
 import EmojiTextAttachmentView
 import ComponentFlow
+import AvatarNode
 
 func ddlog(_ what: @autoclosure () -> String) {
     Logger.shared.log("ContestCalls", what())
 }
 
+private let avatarFont = avatarPlaceholderFont(size: 48.0)
 private let white = UIColor(rgb: 0xffffff)
 private let initiatingGradients: [UIColor] = [UIColor(hexString: "#5295D6"), UIColor(hexString: "#616AD5"), UIColor(hexString: "#AC65D4"), UIColor(hexString: "#7261DA")].compactMap { $0 }
 private let weakSignalGradients: [UIColor] = [UIColor(hexString: "#B84498"), UIColor(hexString: "#F4992E"), UIColor(hexString: "#C94986"), UIColor(hexString: "#FF7E46")].compactMap { $0 }
@@ -90,24 +92,14 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private let containerNode: ASDisplayNode
     private let videoContainerNode: PinchSourceContainerNode
     
-    private let imageNode: TransformImageNode
+    private let imageNode: AvatarNode
 //    private let dimNode: ASImageNode
     
     private var candidateIncomingVideoNodeValue: CallVideoNode?
-    private var incomingVideoNodeValue: CallVideoNode? {
-        didSet {
-            self.keyPreviewNode?.updateAppearance(light: !self.hasVideoNodes)
-            self.statusNode.light = !self.hasVideoNodes
-        }
-    }
+    private var incomingVideoNodeValue: CallVideoNode?
     private var incomingVideoViewRequested: Bool = false
     private var candidateOutgoingVideoNodeValue: CallVideoNode?
-    private var outgoingVideoNodeValue: CallVideoNode? {
-        didSet {
-            self.keyPreviewNode?.updateAppearance(light: !self.hasVideoNodes)
-            self.statusNode.light = !self.hasVideoNodes
-        }
-    }
+    private var outgoingVideoNodeValue: CallVideoNode?
     private var previewOutgoingVideoView: PresentationCallVideoView?
     private var outgoingVideoViewRequested: Bool = false
     private var fullScreenEffectView: UIVisualEffectView?
@@ -124,8 +116,16 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var displayedCameraConfirmation: Bool = false
     private var displayedCameraTooltip: Bool = false
         
-    private var expandedVideoNode: CallVideoNode?
-    private var minimizedVideoNode: CallVideoNode?
+    private var expandedVideoNode: CallVideoNode?{
+        didSet {
+            updateBlurForSubnode()
+        }
+    }
+    private var minimizedVideoNode: CallVideoNode? {
+        didSet {
+            updateBlurForSubnode()
+        }
+    }
     private var disableAnimationForExpandedVideoOnce: Bool = false
     private var animationForExpandedVideoSnapshotView: UIView? = nil
     private var animationForMinimizedVideoSnapshotView: UIView? = nil
@@ -230,8 +230,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         self.videoContainerNode = PinchSourceContainerNode()
         
-        self.imageNode = TransformImageNode()
-        self.imageNode.contentAnimations = [.subsequentUpdates]
+        self.imageNode = AvatarNode(font: avatarFont)
+//        self.imageNode.contentAnimations = [.subsequentUpdates]
         let imageSize: CGSize = CGSize(width: 136.0, height: 136.0)
         self.imageNode.cornerRadius = imageSize.width / 2.0
         self.imageNode.clipsToBounds = true
@@ -243,12 +243,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         imageMaskLayer.path = imageNodeBlobPath
         imageMaskLayer.frame = CGRect(origin: CGPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0), size: imageSize)
         self.imageNode.layer.mask = imageMaskLayer
-        
-//        self.dimNode = ASImageNode()
-//        self.dimNode.contentMode = .scaleToFill
-//        self.dimNode.isUserInteractionEnabled = false
-//        self.dimNode.backgroundColor = UIColor(white: 0.0, alpha: 0.1)
-        
+
         self.backButtonArrowNode = ASImageNode()
         self.backButtonArrowNode.displayWithoutProcessing = true
         self.backButtonArrowNode.displaysAsynchronously = false
@@ -273,7 +268,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         self.speakingContainerNode = ASDisplayNode()
         self.buttonsNode = ContestCallControllerButtonsNode(strings: self.presentationData.strings)
-        self.toastNode = ContestCallControllerToastContainerNode(strings: self.presentationData.strings)
+        self.toastNode = ContestCallControllerToastContainerNode(strings: self.presentationData.strings, light: true)
         self.keyButtonNode = ContestCallControllerKeyButton()
         self.keyButtonNode.accessibilityElementsHidden = false
         
@@ -561,10 +556,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             return
         }
         let location = self.keyButtonNode.frame
-        // TODO: move to strings
-        let text = "Encryption key of this call"
-//        let icon = "Chat/Input/Accessory Panels/MessageSelectionForward"
-//        let icon = TooltipScreen.Icon.info
+        let text = self.presentationData.strings.Calls_ContestKeyEncripted
         self.present?(TooltipScreen(account: self.account, text: text, style: .light, icon: nil, location: .point(location.offsetBy(dx: 0.0, dy: +8.0), .top), displayDuration: .custom(5.0), shouldDismissOnTouch: { _ in
             return .dismiss(consume: false)
         }))
@@ -592,15 +584,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     func updatePeer(accountPeer: Peer, peer: Peer, hasOther: Bool) {
         if !arePeersEqual(self.peer, peer) {
             self.peer = peer
-            if let peerReference = PeerReference(peer), !peer.profileImageRepresentations.isEmpty {
-                let representations: [ImageRepresentationWithReference] = peer.profileImageRepresentations.map({ ImageRepresentationWithReference(representation: $0, reference: .avatar(peer: peerReference, resource: $0.resource)) })
-                self.imageNode.setSignal(chatAvatarGalleryPhoto(account: self.account, representations: representations, immediateThumbnailData: nil, autoFetchFullSize: true))
-//                self.dimNode.isHidden = false
-            } else {
-                self.imageNode.setSignal(callDefaultBackground())
-//                self.dimNode.isHidden = true
-            }
-            
+            self.imageNode.setPeer(context: self.accountContext, account: self.account, theme: self.presentationData.theme, peer: EnginePeer(peer), overrideImage: nil, emptyColor: self.presentationData.theme.list.mediaPlaceholderColor)
             self.toastNode.title = EnginePeer(peer).compactDisplayTitle
             self.statusNode.title = EnginePeer(peer).displayTitle(strings: self.presentationData.strings, displayOrder: self.presentationData.nameDisplayOrder)
             if hasOther {
@@ -1328,7 +1312,13 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.gradientAnimationInProgress = true
         self.animateGradient(node: node)
     }
-
+    
+    private func updateBlurForSubnode() {
+        self.keyPreviewNode?.updateAppearance(light: !self.hasVideoNodes)
+        self.statusNode.light = !self.hasVideoNodes
+        self.toastNode.light = !self.hasVideoNodes
+    }
+    
     private func animateGradient(node: GradientBackgroundNode?) {
         guard self.gradientAnimationEnabled == true, let node = node else {
             self.gradientAnimationInProgress = false
@@ -1592,9 +1582,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             }
         }
         
-        let arguments = TransformImageArguments(corners: ImageCorners(), imageSize: CGSize(width: 640.0, height: 640.0).aspectFilled(layout.size), boundingSize: layout.size, intrinsicInsets: UIEdgeInsets())
-        let apply = self.imageNode.asyncLayout()(arguments)
-        apply()
+//        let arguments = TransformImageArguments(corners: ImageCorners(), imageSize: CGSize(width: 640.0, height: 640.0).aspectFilled(layout.size), boundingSize: layout.size, intrinsicInsets: UIEdgeInsets())
+        self.imageNode.updateSize(size: speakingContainerFrame.size)
+//        apply()
         
         let navigationOffset: CGFloat = max(20.0, layout.safeInsets.top)
         let topOriginY = interpolate(from: -20.0, to: navigationOffset, value: uiDisplayTransition)
