@@ -10,8 +10,123 @@ import TelegramVoip
 import AccountContext
 import AppBundle
 import ComponentFlow
+import AnimatedStickerNode
+import TelegramAnimatedStickerNode
 
 private let buttonCornerRadius: CGFloat = 14.0
+private let buttonFont = Font.semibold(17.0)
+private let durationForCancelAnimation: TimeInterval = 8.0
+private let actionButtonHeight: CGFloat = 56.0
+private let actionButtonFinalHeight: CGFloat = 50.0
+
+private final class CountdownButtonNode: HighlightTrackingButtonNode {
+    private let underlayTextNode: ASTextNode
+    private let underlayContainerNode: ASDisplayNode
+    private let underlayActionButtonMaskLayer = CAShapeLayer()
+    private let filledImageNode: ASImageNode
+    private let filledActionButtonMaskLayer = CAShapeLayer()
+    private let text: String
+    
+    private var lastImageSize: CGSize?
+    private var lastImage: UIImage?
+    private var validSize: CGSize?
+
+    init(text: String) {
+        self.text = text
+        self.filledImageNode = ASImageNode()
+        self.underlayTextNode = ASTextNode()
+        self.underlayContainerNode = ASDisplayNode()
+        self.underlayContainerNode.isHidden = true
+
+        super.init()
+        self.setup()
+        
+        let overlay = ASDisplayNode()
+        overlay.isUserInteractionEnabled = false
+        overlay.alpha = 0.0
+        overlay.backgroundColor = .white.withAlphaComponent(0.2)
+        self.addSubnode(overlay)
+        self.highligthedChanged = { [weak overlay, weak self] highlighted in
+            guard let overlay = overlay, let strongSelf = self else {
+                return
+            }
+            if highlighted {
+                overlay.alpha = 1.0
+                overlay.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+                let transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .spring)
+                transition.updateTransformScale (node: strongSelf, scale: 0.9)
+            } else {
+                overlay.alpha = 0.0
+                overlay.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)
+                let transition: ContainedViewLayoutTransition = .animated(duration: 0.5, curve: .spring)
+                transition.updateTransformScale(node: strongSelf, scale: 1.0)
+            }
+        }
+    }
+    
+    func startAnimation() {
+        let transition: ContainedViewLayoutTransition = .animated(duration: durationForCancelAnimation, curve: .linear)
+        
+        self.underlayContainerNode.isHidden = false
+        let underLayer = CAShapeLayer()
+        underLayer.fillColor = UIColor.black.cgColor
+        underLayer.frame = self.underlayContainerNode.bounds
+        underLayer.path = UIBezierPath(rect: self.underlayContainerNode.bounds).cgPath
+        self.underlayContainerNode.layer.mask = underLayer
+        
+        let underEndPosition = underLayer.position
+        let underStartPosition = CGPoint(x: underLayer.position.x - underLayer.frame.width, y: underLayer.position.y)
+        transition.animatePosition(layer: underLayer, from: underStartPosition, to: underEndPosition, removeOnCompletion: false)
+        
+        let filledLayer = CAShapeLayer()
+        filledLayer.fillColor = UIColor.black.cgColor
+        filledLayer.frame = self.filledImageNode.bounds
+        filledLayer.path = UIBezierPath(rect: self.filledImageNode.bounds).cgPath
+        self.filledImageNode.layer.mask = filledLayer
+
+        let filledtartPosition = filledLayer.position
+        let filledEndPostition = CGPoint(x: filledLayer.position.x + filledLayer.frame.width, y: filledLayer.position.y)
+        transition.animatePosition(layer: filledLayer, from: filledtartPosition, to: filledEndPostition, removeOnCompletion: false)
+    }
+    
+    private func setup() {
+        self.underlayContainerNode.addSubnode(self.underlayTextNode)
+        self.addSubnode(self.underlayContainerNode)
+        self.addSubnode(self.filledImageNode)
+        
+        self.filledActionButtonMaskLayer.fillColor = UIColor.black.cgColor
+        self.underlayActionButtonMaskLayer.fillColor = UIColor.black.cgColor
+        
+        self.underlayTextNode.attributedText = NSAttributedString(string: self.text, font: buttonFont, textColor: .white, paragraphAlignment: .center)
+        self.underlayContainerNode.backgroundColor = .white.withAlphaComponent(0.25)
+    }
+    
+    func updateLayout(size: CGSize, transition: ContainedViewLayoutTransition) {
+        if let validSize = self.validSize, validSize == size {
+            return
+        }
+        
+        self.validSize = size
+        
+        self.filledImageNode.image = makeActionTextImageIfNeeded(size: size)
+        transition.updateFrame(node: self.filledImageNode, frame: CGRect(origin: .zero, size: size))
+        transition.updateFrame(node: self.underlayContainerNode, frame: CGRect(origin: .zero, size: size))
+        
+        let underTextSize = self.underlayTextNode.measure(CGSize(width: size.width, height: size.height))
+        let underTextOrigin = CGPoint(x: floor((size.width - underTextSize.width) / 2.0), y: floor(size.height - underTextSize.height) / 2.0)
+        transition.updateFrame(node: self.underlayTextNode, frame: CGRect(origin: underTextOrigin, size: underTextSize))
+    }
+    
+    private func makeActionTextImageIfNeeded(size: CGSize) -> UIImage? {
+        if self.lastImageSize == size, let lastImage = self.lastImage {
+            return lastImage
+        }
+        
+        self.lastImageSize = size
+        self.lastImage = textTransparentImage(size: size, text: self.text)
+        return self.lastImage
+    }
+}
 
 final class ContestCallRatingNode: ASDisplayNode {
     private let strings: PresentationStrings
@@ -26,12 +141,13 @@ final class ContestCallRatingNode: ASDisplayNode {
     private let subtitleNode: ASTextNode
     private var starContainerNode: ASDisplayNode
     private let starNodes: [ASButtonNode]
+    private var ratingDidApply = false
+    private let countdownButtonNode: CountdownButtonNode
     
-    private let actionNode: ASButtonNode
-    
-    private var lastImageSize: CGSize?
-    private var lastImage: UIImage?
     private var validLayout: CGSize?
+    private var lastFinalSize: CGSize?
+    private var animatedInProgress = false
+    private var animationFinished = false
     
     init(strings: PresentationStrings, light: Bool, dismiss: @escaping () -> Void, apply: @escaping (Int) -> Void) {
         self.strings = strings
@@ -63,7 +179,7 @@ final class ContestCallRatingNode: ASDisplayNode {
         }
         self.starNodes = starNodes
         
-        self.actionNode = ASButtonNode()
+        self.countdownButtonNode = CountdownButtonNode(text: strings.Common_Close)
 
         super.init()
         
@@ -77,82 +193,10 @@ final class ContestCallRatingNode: ASDisplayNode {
             node.addTarget(self, action: #selector(self.starReleased(_:)), forControlEvents: .touchUpInside)
             self.starContainerNode.addSubnode(node)
         }
-        self.actionNode.addTarget(self, action: #selector(self.actionPressed(_:)), forControlEvents: .touchUpInside)
-        
+        self.countdownButtonNode.addTarget(self, action: #selector(self.actionPressed(_:)), forControlEvents: .touchUpInside)
         self.addSubnode(self.contentNode)
-        self.addSubnode(self.actionNode)
-        self.setup()
-        self.starContainerNode.view.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(self.panGesture(_:))))
+        self.addSubnode(self.countdownButtonNode)
         
-        self.contentNode.alpha = 0.0
-        self.actionNode.alpha = 0.0
-    }
-
-    func animateIn(buttonFrom: CGRect?, buttonSnapshot: UIView?, transition: ContainedViewLayoutTransition) {
-        guard let buttonFrom = buttonFrom, let buttonSnapshot = buttonSnapshot else {
-            transition.updateAlpha(node: self.contentNode, alpha: 1.0)
-            transition.updateAlpha(layer: self.actionNode.layer, alpha: 1.0)
-            transition.animateTransformScale(node: self.contentNode, from: 0.8)
-            transition.animateTransformScale(node: self.actionNode, from: 0.8)
-            return
-        }
-    
-        buttonSnapshot.frame = buttonFrom
-        self.view.insertSubview(buttonSnapshot, belowSubview: self.actionNode.view)
-
-        let backColor = UIColor(rgb: 0xff3b30)
-        let expandingView = UIView()
-        expandingView.backgroundColor = backColor
-        expandingView.frame = buttonFrom
-        expandingView.layer.cornerRadius = buttonFrom.height / 2.0
-        self.view.insertSubview(expandingView, belowSubview: buttonSnapshot)
-
-        transition.updateFrame(view: expandingView, frame: self.actionNode.frame)
-        transition.updateCornerRadius(layer: expandingView.layer, cornerRadius: self.actionNode.cornerRadius)
-        expandingView.layer.animate(from: backColor, to: UIColor.white.cgColor, keyPath: "backgroundColor", timingFunction: CAMediaTimingFunctionName.easeIn.rawValue, duration: 0.3)
-        transition.updateAlpha(layer: expandingView.layer, alpha: 0.0, completion: { [weak expandingView] _ in
-            expandingView?.removeFromSuperview()
-        })
-        transition.updateAlpha(layer: buttonSnapshot.layer, alpha: 0.0, completion: { [weak buttonSnapshot] _ in
-            buttonSnapshot?.removeFromSuperview()
-        })
-    
-        transition.updateAlpha(node: self.contentNode, alpha: 1.0)
-        transition.animateTransformScale(node: self.contentNode, from: 0.7)
-        
-        transition.updateAlpha(node: self.actionNode, alpha: 1.0)
-        
-        let actionFrame = self.actionNode.frame
-        let diffX = buttonFrom.maxX - actionFrame.maxX
-        let diffY = actionFrame.minY - buttonFrom.minY
-        let actionNodeFrameFrom = CGRect(x: actionFrame.minX - diffX, y: actionFrame.minY - diffY, width: actionFrame.width + 2 * diffX, height: actionFrame.height + 2 * diffY)
-        
-        ddlog("actionFrameOriginal \(actionFrame)")
-        ddlog("actionNodeFrameFrom \(actionNodeFrameFrom) | \(diffX) | \(diffY)")
-
-        let buttonMaskLayer = CAShapeLayer()
-        buttonMaskLayer.fillColor = UIColor.black.cgColor
-        let fromRect = self.view.convert(buttonFrom, to: self.actionNode.view)
-        ddlog("UIBezierPath \(fromRect)")
-        let fromPath = UIBezierPath(roundedRect: CGRect(origin: CGPoint(x: fromRect.origin.x + diffX, y: fromRect.origin.y + diffY), size: fromRect.size), cornerRadius: fromRect.height / 2.0)
-        let toPath = UIBezierPath(roundedRect: CGRect(origin: CGPoint(x: self.actionNode.bounds.origin.x + diffX, y: self.actionNode.bounds.origin.y + diffY), size: self.actionNode.bounds.size), cornerRadius: buttonCornerRadius)
-        buttonMaskLayer.path = fromPath.cgPath
-        transition.updatePath(layer: buttonMaskLayer, path: toPath.cgPath)
-        
-        let image = makeActionTextImageIfNeeded(size: actionNodeFrameFrom.size)
-        self.actionNode.setImage(image, for: .normal)
-        self.actionNode.frame = actionNodeFrameFrom
-//        transition.animateFrame(node: self.actionNode, from: actionNodeFrameFrom)
-
-        self.actionNode.layer.opacity = 0.0
-        self.actionNode.layer.cornerRadius = buttonFrom.height / 2.0
-        self.actionNode.layer.mask = buttonMaskLayer
-
-        transition.updateCornerRadius(layer: self.actionNode.layer, cornerRadius: buttonCornerRadius)
-        transition.updateAlpha(layer: self.actionNode.layer, alpha: 1.0)
-    }
-
-    private func setup() {
         self.titleNode.attributedText = NSAttributedString(string: self.strings.Calls_ContestRatingTitle, font: Font.semibold(16.0), textColor: .white, paragraphAlignment: .center)
         
         self.subtitleNode.attributedText = NSAttributedString(string: self.strings.Calls_ContestRatingSubtitle, font: Font.regular(16.0), textColor: .white, paragraphAlignment: .center)
@@ -163,20 +207,115 @@ final class ContestCallRatingNode: ASDisplayNode {
             node.setImage(highlighted, for: [.selected])
             node.setImage(highlighted, for: [.selected, .highlighted])
         }
+        self.starContainerNode.view.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(self.panGesture(_:))))
+        
+        self.contentNode.alpha = 0.0
+        self.countdownButtonNode.alpha = 0.0
+        self.countdownButtonNode.clipsToBounds = true
+    }
 
-        self.actionNode.layer.cornerRadius = 10.0
-        if #available(iOS 13.0, *) {
-            self.actionNode.layer.cornerCurve = .continuous
+    func animateIn(buttonFrom: CGRect?, buttonSnapshot: UIView?, transition: ContainedViewLayoutTransition) {
+        if self.animatedInProgress {
+            return
         }
-        self.actionNode.clipsToBounds = true
+        self.animatedInProgress = true
+        guard let buttonFrom = buttonFrom, let buttonSnapshot = buttonSnapshot else {
+            transition.updateAlpha(node: self.contentNode, alpha: 1.0)
+            transition.updateAlpha(layer: self.countdownButtonNode.layer, alpha: 1.0, completion: { [weak self] _ in
+                self?.countdownButtonNode.startAnimation()
+                self?.animatedInProgress = false
+            })
+            transition.animateTransformScale(node: self.contentNode, from: 0.8)
+            transition.animateTransformScale(node: self.countdownButtonNode, from: 0.8)
+            return
+        }
+    
+        buttonSnapshot.frame = buttonFrom
+        self.view.insertSubview(buttonSnapshot, belowSubview: self.countdownButtonNode.view)
+
+        let backColor = UIColor(rgb: 0xff3b30)
+        let expandingView = UIView()
+        expandingView.backgroundColor = backColor
+        expandingView.frame = buttonFrom
+        expandingView.layer.cornerRadius = buttonFrom.height / 2.0
+        self.view.insertSubview(expandingView, belowSubview: buttonSnapshot)
+
+        transition.updateFrame(view: expandingView, frame: self.countdownButtonNode.frame)
+        transition.updateCornerRadius(layer: expandingView.layer, cornerRadius: self.countdownButtonNode.cornerRadius)
+        expandingView.layer.animate(from: backColor, to: UIColor.white.cgColor, keyPath: "backgroundColor", timingFunction: CAMediaTimingFunctionName.easeIn.rawValue, duration: 0.3)
+        transition.updateAlpha(layer: expandingView.layer, alpha: 0.0, completion: { [weak expandingView] _ in
+            expandingView?.removeFromSuperview()
+        })
+        transition.updateAlpha(layer: buttonSnapshot.layer, alpha: 0.0, completion: { [weak buttonSnapshot] _ in
+            buttonSnapshot?.removeFromSuperview()
+        })
+    
+        transition.animateTransformScale(node: self.contentNode, from: 0.7)
+        transition.updateAlpha(node: self.contentNode, alpha: 1.0)
+        transition.updateAlpha(node: self.countdownButtonNode, alpha: 1.0, completion: { [weak self] _ in
+            guard let strongSelf = self else {
+                return
+            }
+            strongSelf.animatedInProgress = false
+            strongSelf.animationFinished = true
+            if let validLayout = strongSelf.validLayout {
+                _ = strongSelf.updateLayout(size: validLayout, transition: .immediate)
+                strongSelf.countdownButtonNode.layer.mask = nil
+            }
+            strongSelf.countdownButtonNode.startAnimation()
+        })
+
+        let fillLayer = CAShapeLayer()
+        fillLayer.fillColor = UIColor.black.cgColor
+        let fromRect = self.view.convert(buttonFrom, to: self.countdownButtonNode.view)
+
+        let diffX = fromRect.maxX - self.countdownButtonNode.frame.maxX
+        let fromPath = UIBezierPath(roundedRect: CGRect(origin: CGPoint(x: fromRect.origin.x + diffX, y: fromRect.origin.y), size: fromRect.size), cornerRadius: fromRect.height / 2.0)
+        let toRect = CGRect(origin: CGPoint(x: diffX, y: (fromRect.height - actionButtonFinalHeight) / 2.0), size: CGSize(width: self.countdownButtonNode.bounds.width, height: actionButtonFinalHeight))
+        let toPath = UIBezierPath(roundedRect: toRect, cornerRadius: buttonCornerRadius)
+        fillLayer.path = fromPath.cgPath
+        self.countdownButtonNode.layer.mask = fillLayer
+
+        let buttonSizeForAnimation = CGSize(width: self.countdownButtonNode.frame.size.width + diffX * 2.0, height: self.countdownButtonNode.frame.size.height)
+        self.countdownButtonNode.updateLayout(size: buttonSizeForAnimation, transition: .immediate)
+        self.countdownButtonNode.frame.origin.x -= diffX
+        self.countdownButtonNode.frame.size = buttonSizeForAnimation
+        
+        self.countdownButtonNode.cornerRadius = self.countdownButtonNode.frame.size.height / 2.0
+        transition.updateCornerRadius(node: self.countdownButtonNode, cornerRadius: buttonCornerRadius)
+
+        transition.updatePath(layer: fillLayer, path: toPath.cgPath, completion: { [weak self]  _ in
+            guard let strongSelf = self, let validLayout = self?.validLayout else {
+                return
+            }
+            let _ = strongSelf.updateLayout(size: validLayout, transition: .immediate)
+            strongSelf.countdownButtonNode.startAnimation()
+        })
+    }
+
+    private func playStickerAnimation(from rect: CGRect) {
+        let animationNode: AnimatedStickerNode = DefaultAnimatedStickerNodeImpl()
+        let animationName = "RatingCallStars"
+        let animationPlaybackMode: AnimatedStickerPlaybackMode = .once
+        self.starContainerNode.addSubnode(animationNode)
+        let sizeFactor: CGFloat = 2.5
+        let size = CGSize(width: rect.width * sizeFactor, height: rect.height * sizeFactor)
+        animationNode.updateLayout(size: size)
+        animationNode.frame = CGRect(origin: .zero, size: size)
+        animationNode.position = rect.center
+        animationNode.setup(source: AnimatedStickerNodeLocalFileSource(name: animationName), width: Int(size.width), height: Int(size.height), playbackMode: animationPlaybackMode, mode: .direct(cachePathPrefix: nil))
+        animationNode.visibility = true
     }
     
     func updateLayout(size: CGSize, transition: ContainedViewLayoutTransition) -> CGSize {
+        if self.animatedInProgress, let lastFinalSize = self.lastFinalSize {
+            return lastFinalSize
+        }
+        
         var size = size
         size.width = min(size.width , 320.0)
 
         self.validLayout = size
-        let actionButtonHeight: CGFloat = 50.0
         let contentSpacing: CGFloat = 10.0
         
         let contentInsets = UIEdgeInsets(top: 20.0, left: 20.0, bottom: 20.0, right: 20.0)
@@ -211,20 +350,25 @@ final class ContestCallRatingNode: ASDisplayNode {
         } else {
             spaceAfterContent = 12.0
         }
-        let actionNodeFrame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + spaceAfterContent), size: CGSize(width: size.width, height: actionButtonHeight))
-        transition.updateFrame(node: self.actionNode, frame: actionNodeFrame)
-        self.actionNode.layer.cornerRadius = buttonCornerRadius
-        self.actionNode.layer.mask = nil
         
-        let image = makeActionTextImageIfNeeded(size: CGSize(width: self.actionNode.frame.size.width, height: self.actionNode.frame.size.height))
-        if image !== self.actionNode.imageNode.image {
-            self.actionNode.setImage(image, for: .normal)
+        let actionNodeFrame: CGRect
+        if self.animationFinished {
+            actionNodeFrame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + spaceAfterContent + 3.0), size: CGSize(width: size.width, height: actionButtonFinalHeight))
+        } else {
+            actionNodeFrame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + spaceAfterContent), size: CGSize(width: size.width, height: actionButtonHeight))
         }
-
-        return CGSize(width: size.width, height: contentSize.height + spaceAfterContent + actionNodeFrame.height)
+        self.countdownButtonNode.updateLayout(size: actionNodeFrame.size, transition: .immediate)
+        transition.updateFrame(node: self.countdownButtonNode, frame: actionNodeFrame)
+        let lastFinalSize = CGSize(width: size.width, height: contentSize.height + spaceAfterContent + actionButtonHeight)
+        self.lastFinalSize = lastFinalSize
+        return lastFinalSize
     }
     
     @objc func panGesture(_ gestureRecognizer: UIPanGestureRecognizer) {
+        if self.ratingDidApply {
+            return
+        }
+
         let location = gestureRecognizer.location(in: self.starContainerNode.view)
         var selectedNode: ASButtonNode?
         for node in self.starNodes {
@@ -274,24 +418,15 @@ final class ContestCallRatingNode: ASDisplayNode {
                 node.isSelected = i <= index
             }
             if let rating = self.rating {
+                self.ratingDidApply = true
                 self.apply(rating)
+                self.playStickerAnimation(from: self.starNodes[index].frame)
             }
         }
     }
     
     @objc func actionPressed(_ sender: ASButtonNode) {
         self.dismiss()
-    }
-    
-    private func makeActionTextImageIfNeeded(size: CGSize) -> UIImage? {
-        if self.lastImageSize == size, let lastImage = self.lastImage {
-            return lastImage
-        }
-        
-        ddlog("generating new image")
-        self.lastImageSize = size
-        self.lastImage = textTransparentImage(size: size, text: self.strings.Common_Close)
-        return self.lastImage
     }
 }
 
@@ -304,7 +439,7 @@ private func textTransparentImage(size: CGSize, text: String) -> UIImage? {
     UIColor.white.setStroke()
 
     let attributes: [NSAttributedString.Key: Any] = [
-        .font: Font.semibold(17.0),
+        .font: buttonFont,
         .foregroundColor: UIColor.white
     ]
     let textSize = text.size(withAttributes: attributes)

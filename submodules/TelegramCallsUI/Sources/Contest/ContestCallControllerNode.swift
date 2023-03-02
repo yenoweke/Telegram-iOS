@@ -1528,12 +1528,20 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         switch self.callState?.state {
         case .terminated:
-            overlayAlpha = 0.0
-            buttonsAlpha = 0.0
-            toastAlpha *= 0.5
-            statusAlpha = 1.0
+            if self.ratingCallNode == nil {
+                overlayAlpha *= 0.5
+                toastAlpha *= 0.5
+                statusAlpha = overlayAlpha
+                buttonsAlpha = overlayAlpha
+            } else {
+                overlayAlpha = 0.0
+                buttonsAlpha = 0.0
+                toastAlpha *= 0.5
+                statusAlpha = 1.0
+            }
+            
         case .terminating:
-            overlayAlpha = 0.0
+            overlayAlpha = 0.5
             toastAlpha *= 0.5
             statusAlpha = 1.0
             buttonsAlpha = 1.0
@@ -1623,10 +1631,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         if let ratingCallNode = self.ratingCallNode {
             let ratingTransiton: ContainedViewLayoutTransition = ratingCallNode.frame.isEmpty ? .immediate : transition
             let horizontalInset: CGFloat = 44.0
-            let availableSize: CGSize = CGSize(width: self.buttonsNode.frame.width - horizontalInset * 2, height: self.buttonsNode.frame.origin.y - statusNodeFrame.maxY - 16.0)
+            let buttonHeight: CGFloat = 56.0 // todo: refactor
+            let availableSize: CGSize = CGSize(width: self.buttonsNode.frame.width - horizontalInset * 2, height: self.buttonsNode.frame.origin.y - statusNodeFrame.maxY + buttonHeight)
             let size = ratingCallNode.updateLayout(size: availableSize, transition: .immediate)
             
-            ratingTransiton.updateFrame(node: ratingCallNode, frame: CGRect(origin: CGPoint(x: self.buttonsNode.frame.origin.x + horizontalInset, y: self.buttonsNode.frame.origin.y - size.height + 53.0), size: size))
+            ratingTransiton.updateFrame(node: ratingCallNode, frame: CGRect(origin: CGPoint(x: self.buttonsNode.frame.origin.x + horizontalInset, y: self.buttonsNode.frame.origin.y - size.height + buttonHeight), size: size))
         }
 
         let fullscreenVideoFrame = containerFullScreenFrame
