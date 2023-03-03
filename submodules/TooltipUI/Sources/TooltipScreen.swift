@@ -50,6 +50,7 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
     private let arrowContainer: ASDisplayNode
     private var arrowEffectView: UIView?
     private let animatedStickerNode: AnimatedStickerNode
+    private let imageNode: ASImageNode
     private let textNode: ImmediateTextNode
     
     private var isArrowInverted: Bool = false
@@ -126,7 +127,25 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
         self.arrowContainer = ASDisplayNode()
         
         let fontSize: CGFloat
-        if case .light = style {
+        if case let .custom(customFontSize, _, backgroundColor) = style {
+            self.effectView = UIView()
+            self.effectView?.backgroundColor = backgroundColor
+            self.backgroundContainerNode.clipsToBounds = true
+            self.backgroundContainerNode.cornerRadius = 14.0
+            fontSize = customFontSize
+            
+            let arrowEffectView = UIView()
+            arrowEffectView.backgroundColor = backgroundColor
+            self.arrowContainer.view.addSubview(arrowEffectView)
+            self.arrowEffectView = arrowEffectView
+
+            let maskLayer = CAShapeLayer()
+            if let path = try? svgPath("M85.882251,0 C79.5170552,0 73.4125613,2.52817247 68.9116882,7.02834833 L51.4264069,24.5109211 C46.7401154,29.1964866 39.1421356,29.1964866 34.4558441,24.5109211 L16.9705627,7.02834833 C12.4696897,2.52817247 6.36519576,0 0,0 L85.882251,0 ", scale: CGPoint(x: 0.333333, y: 0.333333), offset: CGPoint()) {
+                maskLayer.path = path.cgPath
+            }
+            maskLayer.frame = CGRect(origin: CGPoint(), size: arrowSize)
+            self.arrowContainer.layer.mask = maskLayer
+        } else if case .light = style {
             self.effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
             self.backgroundContainerNode.clipsToBounds = true
             self.backgroundContainerNode.cornerRadius = 14.0
@@ -195,6 +214,8 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
         self.textNode.attributedText = stringWithAppliedEntities(text, entities: textEntities, baseColor: .white, linkColor: .white, baseFont: Font.regular(fontSize), linkFont: Font.regular(fontSize), boldFont: Font.semibold(14.0), italicFont: Font.italic(fontSize), boldItalicFont: Font.semiboldItalic(fontSize), fixedFont: Font.monospace(fontSize), blockQuoteFont: Font.regular(fontSize), underlineLinks: true, external: false, message: nil)
         
         self.animatedStickerNode = DefaultAnimatedStickerNodeImpl()
+        self.imageNode = ASImageNode()
+        self.imageNode.isHidden = true
         switch icon {
         case .none:
             break
@@ -204,6 +225,9 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
         case .info:
             self.animatedStickerNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "anim_infotip"), width: Int(70 * UIScreenScale), height: Int(70 * UIScreenScale), playbackMode: .once, mode: .direct(cachePathPrefix: nil))
             self.animatedStickerNode.automaticallyLoadFirstFrame = true
+        case .callsEncrypted:
+            self.imageNode.image = generateTintedImage(image: UIImage(bundleImageName: "Call/ContestCallLock"), color: .white)
+            self.imageNode.isHidden = false
         }
         
         super.init()
@@ -227,6 +251,7 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
         }
         self.containerNode.addSubnode(self.textNode)
         self.containerNode.addSubnode(self.animatedStickerNode)
+        self.containerNode.addSubnode(self.imageNode)
         self.scrollingContainer.addSubnode(self.containerNode)
         self.addSubnode(self.scrollingContainer)
         
@@ -297,7 +322,7 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
         
         let sideInset: CGFloat = self.inset + layout.safeInsets.left
         let bottomInset: CGFloat = 10.0
-        let contentInset: CGFloat = 11.0
+        var contentInset: CGFloat = 11.0
         let contentVerticalInset: CGFloat = 11.0
         let animationSize: CGSize
         let animationInset: CGFloat
@@ -316,6 +341,10 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
             animationSize = CGSize(width: 32.0, height: 32.0)
             animationInset = 0.0
             animationSpacing = 8.0
+        case .callsEncrypted:
+            animationSize = CGSize(width: 9.0, height: 19.0)
+            animationInset = 0.0
+            animationSpacing = 6.0
         }
         
         let containerWidth = max(100.0, min(layout.size.width, 614.0) - (sideInset + layout.safeInsets.left) * 2.0)
@@ -330,6 +359,9 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
                 backgroundHeight = max(animationSize.height, textSize.height) + contentVerticalInset * 2.0
             case .light:
                 backgroundHeight = max(28.0, max(animationSize.height, textSize.height) + 4.0 * 2.0)
+            case .custom(_, let insets, _):
+                backgroundHeight = max(animationSize.height, textSize.height) + insets.top + insets.bottom
+                contentInset = insets.left
         }
                     
         var invertArrow = false
@@ -412,6 +444,11 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
         
         transition.updateFrame(node: self.textNode, frame: CGRect(origin: CGPoint(x: contentInset + animationSize.width + animationSpacing, y: floor((backgroundHeight - textSize.height) / 2.0)), size: textSize))
         
+        if self.imageNode.isHidden == false {
+            let imageFrame = CGRect(origin: CGPoint(x: contentInset - animationInset, y: floorToScreenPixels(backgroundHeight - animationSize.height) / 2.0 ), size: CGSize(width: animationSize.width + animationInset * 2.0, height: animationSize.height + animationInset * 2.0))
+            transition.updateFrame(node: self.imageNode, frame: imageFrame)
+        }
+        
         transition.updateFrame(node: self.animatedStickerNode, frame: CGRect(origin: CGPoint(x: contentInset - animationInset, y: contentVerticalInset - animationInset), size: CGSize(width: animationSize.width + animationInset * 2.0, height: animationSize.height + animationInset * 2.0)))
         self.animatedStickerNode.updateLayout(size: CGSize(width: animationSize.width + animationInset * 2.0, height: animationSize.height + animationInset * 2.0))
     }
@@ -472,7 +509,7 @@ private final class TooltipScreenNode: ViewControllerTracingNode {
             animationDelay = 0.6
         case .info:
             animationDelay = 0.2
-        case .none:
+        case .none, .callsEncrypted:
             animationDelay = 0.0
         }
         
@@ -527,6 +564,7 @@ public final class TooltipScreen: ViewController {
     public enum Icon {
         case info
         case chatListPress
+        case callsEncrypted
     }
     
     public enum DismissOnTouch {
@@ -554,6 +592,7 @@ public final class TooltipScreen: ViewController {
         case `default`
         case light
         case gradient(UIColor, UIColor)
+        case custom(fontSize: CGFloat, contentInset: UIEdgeInsets, backgroundColor: UIColor)
     }
     
     private let account: Account

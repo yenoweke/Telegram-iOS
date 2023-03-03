@@ -535,7 +535,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
         let location = self.keyButtonNode.frame
         let text = self.presentationData.strings.Calls_ContestKeyEncripted
-        self.present?(TooltipScreen(account: self.account, text: text, style: self.hasVideoNodes ? .default : .light, icon: nil, location: .point(location.offsetBy(dx: 0.0, dy: +8.0), .top), displayDuration: .custom(14.0), shouldDismissOnTouch: { [weak self] point in
+        self.present?(TooltipScreen(account: self.account, text: text, style: .custom(fontSize: 15.0, contentInset: UIEdgeInsets(top: 9.0, left: 16.0, bottom: 9.0, right: 16.0), backgroundColor: self.hasVideoNodes ? UIColor.black.withAlphaComponent(0.7) : UIColor.white.withAlphaComponent(0.25)), icon: .callsEncrypted, location: .point(location.offsetBy(dx: 0.0, dy: +8.0), .top), displayDuration: .custom(4.0), shouldDismissOnTouch: { [weak self] point in
             guard let strongSelf = self else {
                 return .ignore
             }
