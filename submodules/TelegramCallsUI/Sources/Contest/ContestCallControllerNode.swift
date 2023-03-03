@@ -23,11 +23,14 @@ import AudioBlob
 import EmojiTextAttachmentView
 import ComponentFlow
 import AvatarNode
+import AnimatedAvatarSetNode
 
 func ddlog(_ what: @autoclosure () -> String) {
     Logger.shared.log("ContestCalls", what())
 }
 
+private let defaultAudioLevel: Float = 0.45
+private let avatarSize: CGSize = CGSize(width: 136.0, height: 136.0)
 private let avatarFont = avatarPlaceholderFont(size: 48.0)
 private let white = UIColor(rgb: 0xffffff)
 private let initiatingGradients: [UIColor] = [UIColor(hexString: "#5295D6"), UIColor(hexString: "#616AD5"), UIColor(hexString: "#AC65D4"), UIColor(hexString: "#7261DA")].compactMap { $0 }
@@ -92,7 +95,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private let containerNode: ASDisplayNode
     private let videoContainerNode: PinchSourceContainerNode
     
-    private let avatarNode: AvatarNode
+    private let avatarNode: ContestCallAvatarNode
+    private var avatarNodeAnimationInProgress = false
     
     private var candidateIncomingVideoNodeValue: CallVideoNode?
     private var incomingVideoNodeValue: CallVideoNode?
@@ -158,6 +162,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             }
         }
     }
+    var canShowEncryptionTooltip: Bool = false
+    var encryptionTooltipDismissed: (() -> Void)?
 
     private var shouldStayHiddenUntilConnection: Bool = false
     
@@ -208,7 +214,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private var gradientEffectView: UIVisualEffectView?
     private var activeGradientColors: [UIColor] = []
     private var gradientAnimationEnabled = false
-    private var audioLevelView: VoiceBlobView?
     private let speakingContainerNode: ASDisplayNode
     private var onEstablishedAnimationAppeared = false
     private var audioLevelViewAnimationInProgress = false
@@ -231,17 +236,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         self.videoContainerNode = PinchSourceContainerNode()
         
-        self.avatarNode = AvatarNode(font: avatarFont)
-        let imageSize: CGSize = CGSize(width: 136.0, height: 136.0)
-        self.avatarNode.cornerRadius = imageSize.width / 2.0
-        self.avatarNode.clipsToBounds = true
-        let (imageNodeBlobPoints, smoothness) = generateBlob(for: imageSize)
-        let imageNodeBlobPath = UIBezierPath.smoothCurve(through: imageNodeBlobPoints, length: imageSize.width, smoothness: smoothness).cgPath
-        let imageMaskLayer = CAShapeLayer()
-        imageMaskLayer.fillColor = UIColor.black.cgColor
-        imageMaskLayer.path = imageNodeBlobPath
-        imageMaskLayer.frame = CGRect(origin: CGPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0), size: imageSize)
-        self.avatarNode.layer.mask = imageMaskLayer
+        self.avatarNode = ContestCallAvatarNode(size: avatarSize, avatarFont: avatarFont)
 
         self.backButtonArrowNode = ASImageNode()
         self.backButtonArrowNode.displayWithoutProcessing = true
@@ -255,15 +250,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         
         self.gradientBackgroundNode = createGradientBackgroundNode(colors: initiatingGradients)
         self.gradientEffectView = makeVisualEffectForGradient()
-
-        self.audioLevelView = VoiceBlobView(
-            frame: .zero,
-            maxLevel: 1.0,
-            smallBlobRange: (0, 0),
-            mediumBlobRange: (0.78, 0.94),
-            bigBlobRange: (0.83, 1.0)
-        )
-        self.audioLevelView?.setColor(white)
         
         self.speakingContainerNode = ASDisplayNode()
         self.buttonsNode = ContestCallControllerButtonsNode(strings: self.presentationData.strings)
@@ -303,23 +289,16 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             self.gradientBackgroundNode?.view.addSubview(effect)
         }
         
-        self.audioLevelView.map(self.speakingContainerNode.view.addSubview)
         self.speakingContainerNode.addSubnode(self.avatarNode)
         self.containerNode.addSubnode(self.speakingContainerNode)
         self.containerNode.addSubnode(self.videoContainerNode)
         
-//        self.containerNode.addSubnode(self.dimNode)
         self.containerNode.addSubnode(self.statusNode)
         self.containerNode.addSubnode(self.buttonsNode)
         self.containerNode.addSubnode(self.toastNode)
         self.containerNode.addSubnode(self.keyButtonNode)
         self.containerNode.addSubnode(self.backButtonArrowNode)
         self.containerNode.addSubnode(self.backButtonNode)
-        
-//        let reaction = MessageReaction(value: .builtin("👍"), count: 1, chosenOrder: 0)
-//        let data = reaction.encode(PostboxEncoder())
-//        let file = PostboxDecoder().decode
-//        reaction.isSelected
         
         self.buttonsNode.mute = { [weak self] in
             self?.toggleMute?()
@@ -551,13 +530,21 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     }
     
     func displayEncriptionTooltip() {
-        guard self.pictureInPictureTransitionFraction.isZero else {
+        guard self.pictureInPictureTransitionFraction.isZero, self.canShowEncryptionTooltip else {
             return
         }
         let location = self.keyButtonNode.frame
         let text = self.presentationData.strings.Calls_ContestKeyEncripted
-        self.present?(TooltipScreen(account: self.account, text: text, style: .light, icon: nil, location: .point(location.offsetBy(dx: 0.0, dy: +8.0), .top), displayDuration: .custom(5.0), shouldDismissOnTouch: { _ in
-            return .dismiss(consume: false)
+        self.present?(TooltipScreen(account: self.account, text: text, style: self.hasVideoNodes ? .default : .light, icon: nil, location: .point(location.offsetBy(dx: 0.0, dy: +8.0), .top), displayDuration: .custom(14.0), shouldDismissOnTouch: { [weak self] point in
+            guard let strongSelf = self else {
+                return .ignore
+            }
+            if strongSelf.keyButtonNode.frame.contains(point) {
+                strongSelf.encryptionTooltipDismissed?()
+                return .dismiss(consume: false)
+            } else {
+                return .ignore
+            }
         }))
     }
     
@@ -583,7 +570,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     func updatePeer(accountPeer: Peer, peer: Peer, hasOther: Bool) {
         if !arePeersEqual(self.peer, peer) {
             self.peer = peer
-            self.avatarNode.setPeer(context: self.accountContext, account: self.account, theme: self.presentationData.theme, peer: EnginePeer(peer), overrideImage: nil, emptyColor: self.presentationData.theme.list.mediaPlaceholderColor)
+            self.avatarNode.setPeer(context: self.accountContext, peer: EnginePeer(peer), synchronousLoad: true, placeholderColor: self.presentationData.theme.list.mediaPlaceholderColor)
             self.toastNode.title = EnginePeer(peer).compactDisplayTitle
             self.statusNode.title = EnginePeer(peer).displayTitle(strings: self.presentationData.strings, displayOrder: self.presentationData.nameDisplayOrder)
             if hasOther {
@@ -988,7 +975,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     
     private func showCallRating(_ callId: CallId, _ isVideo: Bool, transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .easeInOut)) {
         
-        self.audioLevelView?.stopAnimating(duration: 0.2)
+        self.avatarNode.stopAnimating()
         
         let node = ContestCallRatingNode(strings: self.presentationData.strings, light: !self.hasVideoNodes, dismiss: { [weak self] in
             self?.ratingDissmiss?()
@@ -1036,7 +1023,10 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         let transition = ContainedViewLayoutTransition.animated(duration: 0.3, curve: .slide)
         
         self.onEstablishedAnimationAppeared = true
-        self.animateAvatar()
+        self.avatarNodeAnimationInProgress = true
+        self.avatarNode.animateInAndOut(completion: { [weak self] in
+            self?.avatarNodeAnimationInProgress = false
+        })
 
         let offset: CGFloat = 120.0
         var arrowFrom = self.backButtonArrowNode.frame
@@ -1094,21 +1084,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         })
     }
 
-    private func animateAvatar() {
-        self.audioLevelViewAnimationInProgress = true
-
-        func makeAnimation(to scaleTo: NSNumber, duration: TimeInterval) -> CABasicAnimation {
-            let animation = CABasicAnimation(keyPath: "transform.scale")
-            animation.toValue = scaleTo
-            animation.duration = duration
-            animation.autoreverses = true // Set to true to have it scale back to 1.0 automatically
-            return animation
-        }
-
-        self.avatarNode.layer.add(makeAnimation(to: 1.22, duration: 0.15), forKey: "scaleAnimation")
-        self.audioLevelView?.layer.add(makeAnimation(to: 1.33, duration: 0.15), forKey: "scaleAnimation")
-    }
-    
     private func updateToastContent() {
         guard let callState = self.callState else {
             return
@@ -1304,30 +1279,37 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     
     private var interactionInProgress = false
 
-    private func startInteractiveUI() {
-        if self.hasVideoNodes {
+    func startInteractiveUI() {
+        if self.hasVideoNodes || self.containerNode.alpha.isZero || self.avatarNode.frame.isEmpty || self.gradientBackgroundNode?.frame.isEmpty == true {
             return
         }
         self.scheduleStoInteractiveUI()
         if self.interactionInProgress {
             return
         }
-        
         self.interactionInProgress = true
         self.gradientAnimationEnabled = true
-        self.audioLevelView?.updateLevel(0.75)
-        self.audioLevelView?.startAnimating()
         
+        self.avatarNode.updateAudioLevel(color: .white, value: defaultAudioLevel)
+
         self.animateGradient()
     }
-
-    private func stopInteractiveUI() {
+    
+    func stopInteractiveUI() {
         guard self.interactionInProgress else {
             return
         }
         self.interactionInProgress = false
         self.gradientAnimationEnabled = false
-        self.audioLevelView?.stopAnimating(duration: 3.0)
+        self.avatarNode.stopAnimating()
+    }
+    
+    func setAudioLevel(_ level: Float) {
+        guard self.interactionInProgress else {
+            return
+        }
+        let level = max(level, defaultAudioLevel)
+        self.avatarNode.updateAudioLevel(color: .white, value: level)
     }
 
     private func scheduleStoInteractiveUI() {
@@ -1349,10 +1331,15 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     }
     
     private func animateGradient() {
-        guard self.gradientAnimationEnabled == true else {
+        guard self.gradientAnimationEnabled == true, self.gradientBackgroundNode?.isInDisplayState == true else {
             return
         }
+        let startedDate = Date().timeIntervalSince1970
         self.gradientBackgroundNode?.animateEvent(transition: .animated(duration: 0.8, curve: .linear), extendAnimation: false, backwards: false, completion: { [weak self] in
+            let finishedDate = Date().timeIntervalSince1970
+            if (finishedDate - startedDate) < 0.7 {
+                return
+            }
             self?.animateGradient()
         })
     }
@@ -1596,24 +1583,15 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.gradientBackgroundNode?.updateLayout(size: containerFullScreenFrame.size, transition: .immediate, extendAnimation: false, backwards: false, completion: {})
         
         
-        let speakingContainerSize: CGFloat = 136.0
+        let speakingContainerSize: CGFloat = avatarSize.width
         let speakingCenterY = containerFullScreenFrame.height * 0.34
         let speakingContainerFrame = CGRect(x: containerFullScreenFrame.midX - speakingContainerSize/2.0, y: speakingCenterY - speakingContainerSize/2.0, width: speakingContainerSize, height: speakingContainerSize)
         
-        if self.audioLevelViewAnimationInProgress == false {
+//        if self.avatarNodeAnimationInProgress == false {
             transition.updateFrame(node: self.speakingContainerNode, frame: speakingContainerFrame)
             transition.updateFrame(node: self.avatarNode, frame: CGRect(origin: .zero, size: speakingContainerFrame.size))
-
-            audioLevelView.map {
-                var rect = CGRectInset(speakingContainerFrame, -18.0, -18.0)
-                rect.origin = CGPoint(x: -18.0, y: -18.0)
-                transition.updateFrame(view: $0, frame: rect)
-            }
-        }
-        
-//        let arguments = TransformImageArguments(corners: ImageCorners(), imageSize: CGSize(width: 640.0, height: 640.0).aspectFilled(layout.size), boundingSize: layout.size, intrinsicInsets: UIEdgeInsets())
-        self.avatarNode.updateSize(size: speakingContainerFrame.size)
-//        apply()
+            self.avatarNode.updateLayout(size: avatarSize)
+//        }
         
         let navigationOffset: CGFloat = max(20.0, layout.safeInsets.top)
         let topOriginY = interpolate(from: -20.0, to: navigationOffset, value: uiDisplayTransition)
@@ -2292,50 +2270,4 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
         return nil
     }
-}
-
-private func generateBlob(for size: CGSize) -> ([CGPoint], CGFloat) {
-    let minRandomness: CGFloat = 0.1
-    let maxRandomness: CGFloat = 0.2
-    let speedLevel: CGFloat = 1.0
-    let pointsCount: Int = 8
-    let randomness = minRandomness + (maxRandomness - minRandomness) * speedLevel
-    
-    let angle = (CGFloat.pi * 2) / CGFloat(pointsCount)
-    let smoothness = ((4 / 3) * tan(angle / 4)) / sin(angle / 2) / 2
-    
-    return (blob(pointsCount: pointsCount, randomness: randomness)
-        .map {
-            return CGPoint(
-                x: $0.x * CGFloat(size.width),
-                y: $0.y * CGFloat(size.height)
-            )
-        }, smoothness)
-}
-
-private func blob(pointsCount: Int, randomness: CGFloat) -> [CGPoint] {
-    let angle = (CGFloat.pi * 2) / CGFloat(pointsCount)
-    
-    let rgen = { () -> CGFloat in
-        let accuracy: UInt32 = 1000
-        let random = arc4random_uniform(accuracy)
-        return CGFloat(random) / CGFloat(accuracy)
-    }
-    let rangeStart: CGFloat = 1 / (1 + randomness / 10)
-    
-    let startAngle = angle * CGFloat(arc4random_uniform(100)) / CGFloat(100)
-    
-    let points = (0 ..< pointsCount).map { i -> CGPoint in
-        let randPointOffset = (rangeStart + CGFloat(rgen()) * (1 - rangeStart)) / 2
-        let angleRandomness: CGFloat = angle * 0.1
-        let randAngle = angle + angle * ((angleRandomness * CGFloat(arc4random_uniform(100)) / CGFloat(100)) - angleRandomness * 0.5)
-        let pointX = sin(startAngle + CGFloat(i) * randAngle)
-        let pointY = cos(startAngle + CGFloat(i) * randAngle)
-        return CGPoint(
-            x: pointX * randPointOffset,
-            y: pointY * randPointOffset
-        )
-    }
-    
-    return points
 }

@@ -16,6 +16,11 @@ import CallsEmoji
 final class LegacyCallControllerNode: ASDisplayNode, CallControllerNodeProtocol {
     var ratingSelected: ((RatingSelectedItem) -> Void)?
     var ratingDissmiss: (() -> Void)?
+    var canShowEncryptionTooltip: Bool = false
+    var encryptionTooltipDismissed: (() -> Void)?
+    func setAudioLevel(_ level: Float) { }
+    func startInteractiveUI() { }
+    func stopInteractiveUI() { }
 
     private let sharedContext: SharedAccountContext
     private let account: Account

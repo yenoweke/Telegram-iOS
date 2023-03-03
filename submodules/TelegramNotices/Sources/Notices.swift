@@ -169,6 +169,7 @@ private enum ApplicationSpecificGlobalNotice: Int32 {
     case dismissedTrendingEmojiPacks = 35
     case audioRateOptionsTip = 36
     case translationSuggestion = 37
+    case callsEncryptionKeyTip = 38
     
     var key: ValueBoxKey {
         let v = ValueBoxKey(length: 4)
@@ -284,6 +285,10 @@ private struct ApplicationSpecificNoticeKeys {
     
     static func callsTabTip() -> NoticeEntryKey {
         return NoticeEntryKey(namespace: noticeNamespace(namespace: globalNamespace), key: ApplicationSpecificGlobalNotice.callsTabTip.key)
+    }
+    
+    static func callsEncryptionKeyTip() -> NoticeEntryKey {
+        return NoticeEntryKey(namespace: noticeNamespace(namespace: globalNamespace), key: ApplicationSpecificGlobalNotice.callsEncryptionKeyTip.key)
     }
     
     static func chatMessageSearchResultsTip() -> NoticeEntryKey {
@@ -735,6 +740,24 @@ public struct ApplicationSpecificNotice {
                 transaction.setNotice(ApplicationSpecificNoticeKeys.volumeButtonToUnmuteTip(), entry)
             }
         }.start()
+    }
+    
+    public static func getCallsEncryptionKeyTip(accountManager: AccountManager<TelegramAccountManagerTypes>) -> Signal<Bool, NoError> {
+        return accountManager.transaction { transaction -> Bool in
+            if let _ = transaction.getNotice(ApplicationSpecificNoticeKeys.callsEncryptionKeyTip())?.get(ApplicationSpecificBoolNotice.self) {
+                return true
+            } else {
+                return false
+            }
+        }
+    }
+    
+    public static func setCallsEncryptionKeyTip(accountManager: AccountManager<TelegramAccountManagerTypes>) -> Signal<Void, NoError> {
+        return accountManager.transaction { transaction -> Void in
+            if let entry = CodableEntry(ApplicationSpecificBoolNotice()) {
+                transaction.setNotice(ApplicationSpecificNoticeKeys.callsEncryptionKeyTip(), entry)
+            }
+        }
     }
     
     public static func getCallsTabTip(accountManager: AccountManager<TelegramAccountManagerTypes>) -> Signal<Int32, NoError> {

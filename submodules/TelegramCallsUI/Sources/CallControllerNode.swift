@@ -360,6 +360,11 @@ final class CallVideoNode: ASDisplayNode, PreviewVideoNode {
 final class CallControllerNode: ViewControllerTracingNode, CallControllerNodeProtocol {
     var ratingSelected: ((RatingSelectedItem) -> Void)?
     var ratingDissmiss: (() -> Void)?
+    var canShowEncryptionTooltip: Bool = false
+    var encryptionTooltipDismissed: (() -> Void)?
+    func setAudioLevel(_ level: Float) { }
+    func startInteractiveUI() { }
+    func stopInteractiveUI() { }
 
     private enum VideoNodeCorner {
         case topLeft

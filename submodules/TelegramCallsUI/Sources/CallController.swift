@@ -13,6 +13,7 @@ import AccountContext
 import TelegramNotices
 import AppBundle
 import TooltipUI
+import DeviceProximity
 
 struct RatingSelectedItem {
     let rating: Int
@@ -22,6 +23,9 @@ struct RatingSelectedItem {
 
 protocol CallControllerNodeProtocol: AnyObject {
     var isMuted: Bool { get set }
+
+    var canShowEncryptionTooltip: Bool { get set }
+    var encryptionTooltipDismissed: (() -> Void)? { get set }
     
     var toggleMute: (() -> Void)? { get set }
     var setCurrentAudioOutput: ((AudioSessionOutput) -> Void)? { get set }
@@ -44,6 +48,11 @@ protocol CallControllerNodeProtocol: AnyObject {
     func animateIn()
     func animateOut(completion: @escaping () -> Void)
     func expandFromPipIfPossible()
+    
+    func startInteractiveUI()
+    func stopInteractiveUI()
+    
+    func setAudioLevel(_ level: Float)
     
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition)
 }
@@ -80,7 +89,11 @@ public final class CallController: ViewController {
     private var audioOutputStateDisposable: Disposable?
     private var audioOutputState: ([AudioSessionOutput], AudioSessionOutput?)?
     
+    private let audioLevelDisposable = MetaDisposable()
+    
     private let idleTimerExtensionDisposable = MetaDisposable()
+    
+    private var proximityManagerIndex: Int?
     
     public init(accountContext: AccountContext, call: PresentationCall, easyDebugAccess: Bool) {
         self.accountContext = accountContext
@@ -122,6 +135,22 @@ public final class CallController: ViewController {
                 }
             }
         })
+        
+        self.audioLevelDisposable.set((call.audioLevel
+        |> deliverOnMainQueue).start(next: { [weak self] level in
+            self?.controllerNode.setAudioLevel(level)
+        }))
+
+        self.proximityManagerIndex = DeviceProximityManager.shared().add { [weak self] value in
+            guard self?.isNodeLoaded == true else {
+                return
+            }
+            if value {
+                self?.controllerNode.stopInteractiveUI()
+            } else {
+                self?.controllerNode.startInteractiveUI()
+            }
+        }
     }
     
     required public init(coder aDecoder: NSCoder) {
@@ -134,6 +163,10 @@ public final class CallController: ViewController {
         self.callMutedDisposable?.dispose()
         self.audioOutputStateDisposable?.dispose()
         self.idleTimerExtensionDisposable.dispose()
+        self.audioLevelDisposable.dispose()
+        if let proximityManagerIndex = self.proximityManagerIndex {
+            DeviceProximityManager.shared().remove(proximityManagerIndex)
+        }
     }
     
     private func callStateUpdated(_ callState: PresentationCallState) {
@@ -351,6 +384,20 @@ public final class CallController: ViewController {
        
         if let audioOutputState = self.audioOutputState {
             self.controllerNode.updateAudioOutputs(availableOutputs: audioOutputState.0, currentOutput: audioOutputState.1)
+        }
+        
+        let _ = (ApplicationSpecificNotice.getCallsEncryptionKeyTip(accountManager: self.sharedContext.accountManager)
+        |> deliverOnMainQueue).start(next: { [weak self] value in
+            guard let strongSelf = self else {
+                return
+            }
+            strongSelf.controllerNode.canShowEncryptionTooltip = !value
+        })
+        self.controllerNode.encryptionTooltipDismissed = { [weak self] in
+            guard let strongSelf = self else {
+                return
+            }
+             let _ = ApplicationSpecificNotice.setCallsEncryptionKeyTip(accountManager: strongSelf.sharedContext.accountManager).start()
         }
     }
     
