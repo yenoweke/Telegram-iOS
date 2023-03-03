@@ -2330,6 +2330,7 @@ Unused sets are archived when you add more.";
 "Calls.ContestRatingSubtitle" = "Please rate the quality of this call.";
 "Calls.ContestWeakNetwork" = "Weak network signal";
 "Calls.ContestKeyEncripted" = "Encryption key of this call";
+"Calls.ContestThisCallEncrypted" = "This call is end-to end encrypted";
 
 "Call.Seconds_1" = "%@ second";
 "Call.Seconds_2" = "%@ seconds";

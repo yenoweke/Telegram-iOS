@@ -540,7 +540,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 return .ignore
             }
             if strongSelf.keyButtonNode.frame.contains(point) {
-                strongSelf.encryptionTooltipDismissed?()
                 return .dismiss(consume: false)
             } else {
                 return .ignore
@@ -1855,9 +1854,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
 
     @objc func keyPressed() {
         if self.keyPreviewNode == nil, let keyText = self.keyTextData?.1, let peer = self.peer {
-            // TODO: move strings to localization
-            let titleText = "This call is end-to end encrypted"
-            let buttonText = "OK"
+            self.encryptionTooltipDismissed?()
+            let titleText = self.presentationData.strings.Calls_ContestThisCallEncrypted
+            let buttonText = self.presentationData.strings.Common_OK
             let keyPreviewNode = ContestCallControllerKeyPreviewNode(context: self.accountContext, keyText: keyText, titleText: titleText, infoText: self.presentationData.strings.Call_EmojiDescription(EnginePeer(peer).compactDisplayTitle).string.replacingOccurrences(of: "%%", with: "%"), buttonText: buttonText, light: self.incomingVideoNodeValue == nil && self.outgoingVideoNodeValue == nil, dismiss: { [weak self] in
                 if let _ = self?.keyPreviewNode {
                     self?.backPressed()
