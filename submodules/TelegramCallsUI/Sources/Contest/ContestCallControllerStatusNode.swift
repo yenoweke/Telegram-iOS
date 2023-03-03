@@ -199,24 +199,12 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
             }
         }
     }
-    
-    var light: Bool = false {
-        didSet {
-            self.receptionTextStatusContainerNode.view.backgroundColor = light ? UIColor.white.withAlphaComponent(0.15) : UIColor.black.withAlphaComponent(0.25)
-        }
-    }
 
     private var statusTimer: SwiftSignalKit.Timer?
     private var validLayoutWidth: CGFloat?
-    private var isCompact: Bool = false {
-        willSet {
-            if newValue != self.isCompact {
-                self.receptionTextStatusContainerNode.view.backgroundColor = newValue ? UIColor.black.withAlphaComponent(0.15) : UIColor.white.withAlphaComponent(0.15)
-            }
-        }
-    }
+    private var isCompact: Bool = false
     
-    init(weakNetworkText: String, light: Bool) {
+    init(weakNetworkText: String) {
         self.titleNode = TextNode()
         self.statusContainerNode = ASDisplayNode()
         self.statusNode = TextNode()
@@ -259,7 +247,6 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
         self.addSubnode(self.titleActivateAreaNode)
         self.addSubnode(self.statusActivateAreaNode)
         self.receptionTextStatusContainerNode.addSubnode(self.receptionTextNode)
-        self.light = light
     }
     
     deinit {
@@ -273,6 +260,8 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
     }
     
     func updateLayout(constrainedWidth: CGFloat, compact: Bool, transition: ContainedViewLayoutTransition) -> CGFloat {
+        self.receptionTextStatusContainerNode.view.backgroundColor = compact ? UIColor.black.withAlphaComponent(0.15) : UIColor.white.withAlphaComponent(0.15)
+
         // compact disabled after update in contest channel. "The partner's name is slightly moved below to prevent cases when it has to get cut because of the emoji row. "
         let compact = false
         self.isCompact = compact
