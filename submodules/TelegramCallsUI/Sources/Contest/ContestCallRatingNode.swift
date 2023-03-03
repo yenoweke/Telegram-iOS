@@ -148,6 +148,7 @@ final class ContestCallRatingNode: ASDisplayNode {
     private var lastFinalSize: CGSize?
     private var animatedInProgress = false
     private var animationFinished = false
+    private let hapticFeedback = HapticFeedback()
     
     init(strings: PresentationStrings, light: Bool, dismiss: @escaping () -> Void, apply: @escaping (Int) -> Void) {
         self.strings = strings
@@ -369,6 +370,10 @@ final class ContestCallRatingNode: ASDisplayNode {
             return
         }
 
+        if gestureRecognizer.state == .began {
+            self.hapticFeedback.prepareImpact(.medium)
+        }
+
         let location = gestureRecognizer.location(in: self.starContainerNode.view)
         var selectedNode: ASButtonNode?
         for node in self.starNodes {
@@ -380,6 +385,7 @@ final class ContestCallRatingNode: ASDisplayNode {
         if let selectedNode = selectedNode {
             switch gestureRecognizer.state {
                 case .began, .changed:
+                    self.hapticFeedback.impact(.medium)
                     self.starPressed(selectedNode)
                 case .ended:
                     self.starReleased(selectedNode)
@@ -421,6 +427,7 @@ final class ContestCallRatingNode: ASDisplayNode {
                 self.ratingDidApply = true
                 self.apply(rating)
                 self.playStickerAnimation(from: self.starNodes[index].frame)
+                self.hapticFeedback.prepareImpact()
             }
         }
     }

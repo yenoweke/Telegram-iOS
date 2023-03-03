@@ -93,7 +93,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private let videoContainerNode: PinchSourceContainerNode
     
     private let imageNode: AvatarNode
-//    private let dimNode: ASImageNode
     
     private var candidateIncomingVideoNodeValue: CallVideoNode?
     private var incomingVideoNodeValue: CallVideoNode?
@@ -106,6 +105,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     
     private var removedMinimizedVideoNodeValue: CallVideoNode?
     private var removedExpandedVideoNodeValue: CallVideoNode?
+    private var removedExpandedVideoNodeValueIsIncoming: Bool?
     
     private var isRequestingVideo: Bool = false
     private var animateRequestedVideoOnce: Bool = false
@@ -699,6 +699,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 if self.expandedVideoNode == incomingVideoNodeValue {
                     self.expandedVideoNode = nil
                     self.removedExpandedVideoNodeValue = incomingVideoNodeValue
+                    self.removedExpandedVideoNodeValueIsIncoming = true
                     
                     if let minimizedVideoNode = self.minimizedVideoNode {
                         self.expandedVideoNode = minimizedVideoNode
@@ -810,6 +811,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 if self.expandedVideoNode == self.outgoingVideoNodeValue {
                     self.expandedVideoNode = nil
                     self.removedExpandedVideoNodeValue = outgoingVideoNodeValue
+                    self.removedExpandedVideoNodeValueIsIncoming = false
                     
                     if let minimizedVideoNode = self.minimizedVideoNode {
                         self.expandedVideoNode = minimizedVideoNode
@@ -1663,6 +1665,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             }
             if let removedExpandedVideoNodeValue = self.removedExpandedVideoNodeValue {
                 self.removedExpandedVideoNodeValue = nil
+                self.removedExpandedVideoNodeValueIsIncoming = nil
                 
                 expandedVideoTransition.updateFrame(node: expandedVideoNode, frame: fullscreenVideoFrame, completion: { [weak removedExpandedVideoNodeValue] _ in
                     removedExpandedVideoNodeValue?.removeFromSupernode()
@@ -1699,6 +1702,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 transition.updateAlpha(node: expandedVideoNode, alpha: 1.0)
             }
             
+            self.animateRequestedVideoOnce = false
             if self.animateRequestedVideoOnce {
                 self.animateRequestedVideoOnce = false
                 if expandedVideoNode === self.outgoingVideoNodeValue {
@@ -1714,8 +1718,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         } else {
             if let removedExpandedVideoNodeValue = self.removedExpandedVideoNodeValue {
                 self.removedExpandedVideoNodeValue = nil
-                
-                if transition.isAnimated, self.incomingVideoNodeValue != nil {
+                let removedExpandedVideoNodeValueIsIncoming = self.removedExpandedVideoNodeValueIsIncoming
+                self.removedExpandedVideoNodeValueIsIncoming = nil
+                if transition.isAnimated, removedExpandedVideoNodeValueIsIncoming == true {
                     let layerTransition = Transition(transition)
                     let shortLayerTransition: Transition = .init(animation: .curve(duration: 0.05, curve: .spring))
                     
@@ -1740,7 +1745,9 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                         }
                     })
                 } else if transition.isAnimated {
-                    removedExpandedVideoNodeValue.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.1, delay: 0.2, removeOnCompletion: false, completion: { [weak removedExpandedVideoNodeValue] _ in
+                    transition.updateCornerRadius(layer: removedExpandedVideoNodeValue.layer, cornerRadius: 60.0)
+                    removedExpandedVideoNodeValue.layer.animateScale(from: 1.0, to: 0.7, duration: 0.3, removeOnCompletion: false)
+                    removedExpandedVideoNodeValue.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak removedExpandedVideoNodeValue] _ in
                         removedExpandedVideoNodeValue?.removeFromSupernode()
                     })
                 } else {
@@ -1776,16 +1783,10 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 }
 
                 if minimizedVideoNode.frame.isEmpty {
-                    let scaleFactor = fullscreenVideoFrame.width / previewVideoFrame.width
-                    minimizedVideoTransition.animateTransformScale(layer: minimizedVideoNode.layer, from: CGPoint(x: scaleFactor, y: scaleFactor))
-                    minimizedVideoTransition.animatePosition(layer: minimizedVideoNode.layer, from: fullscreenVideoFrame.center, to: previewVideoFrame.center)
-                    minimizedVideoTransition = .immediate
-                    minimizedVideoTransition.updateFrame(node: minimizedVideoNode, frame: previewVideoFrame)
-                } else {
-                    minimizedVideoTransition.updateFrame(node: minimizedVideoNode, frame: previewVideoFrame)
+                    minimizedVideoNode.updateLayout(size: fullscreenVideoFrame.size, cornerRadius: interpolate(from: 14.0, to: 24.0, value: self.pictureInPictureTransitionFraction), isOutgoing: minimizedVideoNode === self.outgoingVideoNodeValue, deviceOrientation: mappedDeviceOrientation, isCompactLayout: layout.metrics.widthClass == .compact, transition: .immediate)
+                    minimizedVideoNode.frame = fullscreenVideoFrame
                 }
-                
-                minimizedVideoTransition = .immediate
+                minimizedVideoTransition.updateFrame(node: minimizedVideoNode, frame: previewVideoFrame)
                 minimizedVideoNode.updateLayout(size: previewVideoFrame.size, cornerRadius: interpolate(from: 14.0, to: 24.0, value: self.pictureInPictureTransitionFraction), isOutgoing: minimizedVideoNode === self.outgoingVideoNodeValue, deviceOrientation: mappedDeviceOrientation, isCompactLayout: layout.metrics.widthClass == .compact, transition: minimizedVideoTransition)
             }
             

@@ -213,16 +213,39 @@ private class CallControllerToastItemNode: ASDisplayNode {
     private(set) var currentHeight: CGFloat?
     var light: Bool {
         didSet {
-            self.updateEffect()
+            self.updateEffectIfNeeded()
         }
     }
+    private var lastStyle: UIBlurEffect.Style?
     
-    private func updateEffect() {
+    private func updateEffectIfNeeded() {
+        let applyStyle: UIBlurEffect.Style
         if #available(iOS 13.0, *) {
-            self.effectView.effect = UIBlurEffect(style: self.light ? .systemMaterialLight : .systemThinMaterialDark)
+            applyStyle = self.light ? .systemMaterialLight : .systemThinMaterialDark
             self.effectView.alpha = self.light ? 0.3 : 0.6
         } else {
-            self.effectView.effect = UIBlurEffect(style: self.light ? .light : .dark)
+            applyStyle = self.light ? .light : .dark
+        }
+        if self.lastStyle != applyStyle {
+            self.lastStyle = applyStyle
+            
+            var effectAlpha: Float = 1.0
+            if #available(iOS 13.0, *) {
+                effectAlpha = self.light ? 0.3 : 0.6
+            }
+
+            if let snapshotView = self.effectView.snapshotView(afterScreenUpdates: false) {
+                snapshotView.frame = self.effectView.frame
+                self.clipNode.view.insertSubview(snapshotView, aboveSubview: self.effectView)
+                snapshotView.layer.opacity = 0.0
+                snapshotView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.35, completion: { [weak snapshotView] _ in
+                    snapshotView?.removeFromSuperview()
+                })
+            }
+            self.effectView.layer.opacity = effectAlpha
+            self.effectView.layer.animateAlpha(from: 0.0, to: CGFloat(effectAlpha), duration: 0.35)
+            self.effectView.effect = UIBlurEffect(style: applyStyle)
+            
         }
     }
     
@@ -279,7 +302,7 @@ private class CallControllerToastItemNode: ASDisplayNode {
             
             self.currentHeight = backgroundSize.height
         }
-        self.updateEffect()
+        self.updateEffectIfNeeded()
         return self.currentHeight ?? 28.0
     }
     
