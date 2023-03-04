@@ -159,7 +159,11 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
         return finalSize
     }
     
+    private var animationSnapshotView: UIView?
+
     func animateIn(from rect: CGRect, fromNode: ASDisplayNode, parentNode: ASDisplayNode) {
+        self.animationSnapshotView = fromNode.view.snapshotView(afterScreenUpdates: false)
+        
         self.containerNode.frame.size = self.bounds.size
         self.containerNode.frame.origin = .zero
         self.containerNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
@@ -208,6 +212,28 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
         })
         
         self.keyContainerNode.layer.animateScale(from: 1.0, to: rect.size.width / (self.keyTextNode.frame.size.width - 12.0), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
+        
+        if let animationSnapshotView = self.animationSnapshotView {
+            self.animationSnapshotView = nil
+            self.view.addSubview(animationSnapshotView)
+
+            let scale = (self.keyContainerNode.frame.height / animationSnapshotView.frame.height) * 1.2
+            let immediateTransition: ContainedViewLayoutTransition = .immediate
+            immediateTransition.updateTransformScale(layer: animationSnapshotView.layer, scale: scale)
+            immediateTransition.updateAlpha(layer: animationSnapshotView.layer, alpha: 0.0)
+            
+            let transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .spring)
+            
+            transition.updateTransformScale(layer: animationSnapshotView.layer, scale: 1.0)
+            animationSnapshotView.layer.position = keyAnimateTo
+            animationSnapshotView.layer.animateKeyframe(cgPath: path, duration: 0.3, keyPath: "position", mediaTimingFunction: CAMediaTimingFunction(name: .easeOut), removeOnCompletion: false, completion: { [weak animationSnapshotView] _ in
+                animationSnapshotView?.removeFromSuperview()
+            })
+            
+            let fastTransition = ContainedViewLayoutTransition(transition, durationFactor: 1.0 / 3.0)
+            fastTransition.updateAlpha(layer: self.keyTextNode.layer, alpha: 0.0)
+            fastTransition.updateAlpha(layer: animationSnapshotView.layer, alpha: 1.0)
+        }
 
         let scaleFactor: CGFloat = 0.7
         let duration: TimeInterval = 0.12
@@ -221,7 +247,6 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
         self.containerNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: duration, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)
         
         if keyItemViews.isEmpty == false {
-            self.keyTextNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.1, removeOnCompletion: false)
             for view in keyItemViews {
                 view.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.1, removeOnCompletion: false)
             }
@@ -279,8 +304,8 @@ private func makeInPath(startPoint: CGPoint, endPoint: CGPoint) -> CGPath {
 private func makeOutPath(startPoint: CGPoint, endPoint: CGPoint) -> CGPath {
     let path = UIBezierPath()
     path.move(to: startPoint)
-    let diffX = (startPoint.x + endPoint.x) * 0.17
-    let diffY = (startPoint.y + endPoint.y) * 0.17
+    let diffX = (startPoint.x + endPoint.x) * 0.2
+    let diffY = (startPoint.y + endPoint.y) * 0.2
     let controlPoint1 = CGPoint(x: endPoint.x - diffX, y: startPoint.y)
     let controlPoint2 = CGPoint(x: endPoint.x, y: startPoint.y - diffY)
     path.addCurve(

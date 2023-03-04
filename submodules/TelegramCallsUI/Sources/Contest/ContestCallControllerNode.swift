@@ -1019,7 +1019,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         }
         for file in files {
             let isTemplate = file.isCustomTemplateEmoji
-            let fetchFile = animationCacheFetchFile(context: self.accountContext, userLocation: .other, userContentType: .sticker, resource: .media(media: .standalone(media: file), resource: file.resource), type: AnimationCacheAnimationType(file: file), keyframeOnly: true, customColor: isTemplate ? .white : nil)
+            let fetchFile = animationCacheFetchFile(context: self.accountContext, userLocation: .other, userContentType: .sticker, resource: .media(media: .standalone(media: file), resource: file.resource), type: AnimationCacheAnimationType(file: file), keyframeOnly: false, customColor: isTemplate ? .white : nil)
                 
             let loadDisposable = self.accountContext.animationCache.get(sourceId: file.resource.id.stringRepresentation, size: ContestCallControllerKeyPreviewNode.emojiSize, fetch: fetchFile).start()
             self.prefetchKeyAnimationDisposable.add(loadDisposable)
@@ -1876,8 +1876,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
             
             if let (validLayout, _) = self.validLayout {
                 self.updateKeyPreviewNode(containerSize: validLayout.size, transition: .immediate)
-                self.keyButtonNode.isHidden = true
                 keyPreviewNode.animateIn(from: self.keyButtonNode.frame, fromNode: self.keyButtonNode, parentNode: self)
+                self.keyButtonNode.isHidden = true
                 
                 self.speakingContainerNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
                 self.speakingContainerNode.layer.animateScale(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
