@@ -128,8 +128,8 @@ final class ContestCallAvatarNode: ASDisplayNode {
                 frame: blobFrame,
                 maxLevel: 0.7,
                 smallBlobRange: (0, 0),
-                mediumBlobRange: (0.73, 0.9),
-                bigBlobRange: (0.84, 0.95)
+                mediumBlobRange: (0.69, 0.87),
+                bigBlobRange: (0.71, 1.0)
             )
             
             audioLevelView.setColor(color)

@@ -54,7 +54,7 @@ private final class CountdownButtonNode: HighlightTrackingButtonNode {
                 overlay.alpha = 1.0
                 overlay.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
                 let transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .spring)
-                transition.updateTransformScale (node: strongSelf, scale: 0.9)
+                transition.updateTransformScale(node: strongSelf, scale: 0.9)
             } else {
                 overlay.alpha = 0.0
                 overlay.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)
@@ -64,7 +64,14 @@ private final class CountdownButtonNode: HighlightTrackingButtonNode {
         }
     }
     
+    private var animationStarted: Bool = false
+    
     func startAnimation() {
+        if self.animationStarted {
+            return
+        }
+        self.animationStarted = true
+
         let transition: ContainedViewLayoutTransition = .animated(duration: durationForCancelAnimation, curve: .linear)
         
         self.underlayContainerNode.isHidden = false
@@ -81,12 +88,29 @@ private final class CountdownButtonNode: HighlightTrackingButtonNode {
         let filledLayer = CAShapeLayer()
         filledLayer.fillColor = UIColor.black.cgColor
         filledLayer.frame = self.filledImageNode.bounds
-        filledLayer.path = UIBezierPath(rect: self.filledImageNode.bounds).cgPath
+        filledLayer.path = UIBezierPath(roundedRect: self.underlayContainerNode.bounds, cornerRadius: buttonCornerRadius).cgPath
         self.filledImageNode.layer.mask = filledLayer
 
         let filledtartPosition = filledLayer.position
         let filledEndPostition = CGPoint(x: filledLayer.position.x + filledLayer.frame.width, y: filledLayer.position.y)
         transition.animatePosition(layer: filledLayer, from: filledtartPosition, to: filledEndPostition, removeOnCompletion: false)
+        
+        let topCornerBackView = UIView()
+        let bottomCornerBackView = UIView()
+        for view in [topCornerBackView, bottomCornerBackView] {
+            view.backgroundColor = .white.withAlphaComponent(0.25)
+            self.view.insertSubview(view, belowSubview: self.filledImageNode.view)
+        }
+        
+        let helperViewsSize = buttonCornerRadius * 1.3
+        topCornerBackView.frame = CGRect(origin: self.filledImageNode.view.frame.origin, size: CGSize(width: helperViewsSize, height: helperViewsSize))
+        bottomCornerBackView.frame = CGRect(origin: CGPoint(x: self.filledImageNode.view.frame.origin.x, y: self.filledImageNode.view.frame.maxY - helperViewsSize), size: CGSize(width: helperViewsSize, height: helperViewsSize))
+        
+        let topToPosition = CGPoint(x: topCornerBackView.center.x + filledLayer.frame.width, y: topCornerBackView.center.y)
+        transition.animatePosition(layer: topCornerBackView.layer, from: topCornerBackView.layer.position, to: topToPosition, removeOnCompletion: false)
+
+        let bottomToPosition = CGPoint(x: bottomCornerBackView.center.x + filledLayer.frame.width, y: bottomCornerBackView.center.y)
+        transition.animatePosition(layer: bottomCornerBackView.layer, from: bottomCornerBackView.layer.position, to: bottomToPosition, removeOnCompletion: false)
     }
     
     private func setup() {
@@ -290,20 +314,21 @@ final class ContestCallRatingNode: ASDisplayNode {
                 return
             }
             let _ = strongSelf.updateLayout(size: validLayout, transition: .immediate)
-            strongSelf.countdownButtonNode.startAnimation()
         })
     }
 
     private func playStickerAnimation(from rect: CGRect) {
+        let animatonCenter = self.starContainerNode.convert(rect.center, to: self)
+        
         let animationNode: AnimatedStickerNode = DefaultAnimatedStickerNodeImpl()
         let animationName = "RatingCallStars"
         let animationPlaybackMode: AnimatedStickerPlaybackMode = .once
-        self.starContainerNode.addSubnode(animationNode)
-        let sizeFactor: CGFloat = 2.5
+        self.addSubnode(animationNode)
+        let sizeFactor: CGFloat = 2.85
         let size = CGSize(width: rect.width * sizeFactor, height: rect.height * sizeFactor)
         animationNode.updateLayout(size: size)
         animationNode.frame = CGRect(origin: .zero, size: size)
-        animationNode.position = rect.center
+        animationNode.position = animatonCenter
         animationNode.setup(source: AnimatedStickerNodeLocalFileSource(name: animationName), width: Int(size.width), height: Int(size.height), playbackMode: animationPlaybackMode, mode: .direct(cachePathPrefix: nil))
         animationNode.visibility = true
     }
@@ -370,10 +395,6 @@ final class ContestCallRatingNode: ASDisplayNode {
             return
         }
 
-        if gestureRecognizer.state == .began {
-            self.hapticFeedback.prepareImpact(.medium)
-        }
-
         let location = gestureRecognizer.location(in: self.starContainerNode.view)
         var selectedNode: ASButtonNode?
         for node in self.starNodes {
@@ -385,7 +406,6 @@ final class ContestCallRatingNode: ASDisplayNode {
         if let selectedNode = selectedNode {
             switch gestureRecognizer.state {
                 case .began, .changed:
-                    self.hapticFeedback.impact(.medium)
                     self.starPressed(selectedNode)
                 case .ended:
                     self.starReleased(selectedNode)
@@ -427,7 +447,7 @@ final class ContestCallRatingNode: ASDisplayNode {
                 self.ratingDidApply = true
                 self.apply(rating)
                 self.playStickerAnimation(from: self.starNodes[index].frame)
-                self.hapticFeedback.prepareImpact()
+                self.hapticFeedback.impact()
             }
         }
     }

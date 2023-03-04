@@ -203,8 +203,19 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
     private var statusTimer: SwiftSignalKit.Timer?
     private var validLayoutWidth: CGFloat?
     private var isCompact: Bool = false
+
+    var light: Bool {
+        didSet {
+            self.updateTheme()
+        }
+    }
     
-    init(weakNetworkText: String) {
+    private func updateTheme() {
+        self.receptionTextStatusContainerNode.view.backgroundColor = self.light ? UIColor.white.withAlphaComponent(0.25) : UIColor.black.withAlphaComponent(0.15)
+    }
+    
+    init(weakNetworkText: String, light: Bool) {
+        self.light = light
         self.titleNode = TextNode()
         self.statusContainerNode = ASDisplayNode()
         self.statusNode = TextNode()
@@ -247,6 +258,7 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
         self.addSubnode(self.titleActivateAreaNode)
         self.addSubnode(self.statusActivateAreaNode)
         self.receptionTextStatusContainerNode.addSubnode(self.receptionTextNode)
+        self.updateTheme()
     }
     
     deinit {
@@ -260,8 +272,6 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
     }
     
     func updateLayout(constrainedWidth: CGFloat, compact: Bool, transition: ContainedViewLayoutTransition) -> CGFloat {
-        self.receptionTextStatusContainerNode.view.backgroundColor = compact ? UIColor.black.withAlphaComponent(0.15) : UIColor.white.withAlphaComponent(0.15)
-
         // compact disabled after update in contest channel. "The partner's name is slightly moved below to prevent cases when it has to get cut because of the emoji row. "
         let compact = false
         self.isCompact = compact

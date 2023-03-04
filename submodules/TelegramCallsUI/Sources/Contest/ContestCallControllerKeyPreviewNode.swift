@@ -66,7 +66,6 @@ final class ContestCallControllerKeyPreviewNode: ASDisplayNode {
 
         super.init()
         
-//        self.keyTextNode.attributedText = NSAttributedString(string: keyText, font: emojiFont, textColor: .black)
         self.keyTextNode.attributedText = NSAttributedString(string: keyText, attributes: [NSAttributedString.Key.font: emojiFont, NSAttributedString.Key.kern: 10.0 as NSNumber])
         
         self.titleTextNode.attributedText = NSAttributedString(string: titleText, font: titleFont, textColor: UIColor.white, paragraphAlignment: .center)

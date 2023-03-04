@@ -16,6 +16,7 @@ import ComponentFlow
 private let accentColor: UIColor = UIColor(rgb: 0x007aff)
 
 final class ContestVoiceChatCameraPreviewController: ViewController {
+    
     private var controllerNode: VoiceChatCameraPreviewControllerNode {
         return self.displayNode as! VoiceChatCameraPreviewControllerNode
     }
@@ -25,14 +26,14 @@ final class ContestVoiceChatCameraPreviewController: ViewController {
     private var animatedIn = false
 
     private let cameraNode: PreviewVideoNode
-    private let shareCamera: (ASDisplayNode, Bool) -> Void
+    private let shareCamera: (ASDisplayNode, Bool, _ completion: @escaping (Bool) -> Void) -> Void
     private let switchCamera: () -> Void
     private let fromFrame: CGRect?
-    private var didTapShare: Bool = false
+    private var animatedDismiss: Bool = true
     
     private var presentationDataDisposable: Disposable?
     
-    init(sharedContext: SharedAccountContext, cameraNode: PreviewVideoNode, fromFrame: CGRect?, shareCamera: @escaping (ASDisplayNode, Bool) -> Void, switchCamera: @escaping () -> Void) {
+    init(sharedContext: SharedAccountContext, cameraNode: PreviewVideoNode, fromFrame: CGRect?, shareCamera: @escaping (ASDisplayNode, Bool, _ completion: @escaping (_ animated: Bool) -> Void) -> Void, switchCamera: @escaping () -> Void) {
         self.sharedContext = sharedContext
         self.cameraNode = cameraNode
         self.shareCamera = shareCamera
@@ -70,9 +71,10 @@ final class ContestVoiceChatCameraPreviewController: ViewController {
         self.displayNode = VoiceChatCameraPreviewControllerNode(controller: self, sharedContext: self.sharedContext, cameraNode: self.cameraNode)
         self.controllerNode.shareCamera = { [weak self] unmuted in
             if let strongSelf = self {
-                strongSelf.didTapShare = true
-                strongSelf.shareCamera(strongSelf.cameraNode, unmuted)
-                strongSelf.dismiss()
+                strongSelf.shareCamera(strongSelf.cameraNode, unmuted) { [weak self] animated in
+                    self?.animatedDismiss = animated
+                    self?.dismiss()
+                }
             }
         }
         self.controllerNode.switchCamera = { [weak self] in
@@ -101,10 +103,10 @@ final class ContestVoiceChatCameraPreviewController: ViewController {
     }
     
     override public func dismiss(completion: (() -> Void)? = nil) {
-        if self.didTapShare {
-            self.controllerNode.dismiss?()
-        } else {
+        if self.animatedDismiss {
             self.controllerNode.animateOut(toFrame: self.fromFrame, completion: completion)
+        } else {
+            self.controllerNode.dismiss?()
         }
     }
     
@@ -172,8 +174,6 @@ private class VoiceChatCameraPreviewControllerNode: ViewControllerTracingNode, U
         self.backgroundNode = ASDisplayNode()
         self.backgroundNode.clipsToBounds = true
         self.backgroundNode.cornerRadius = 16.0
-        
-//        let backgroundColor = UIColor(rgb: 0x000000)
     
         self.contentBackgroundNode = ASDisplayNode()
         self.contentBackgroundNode.backgroundColor = .red.withAlphaComponent(0.2)//backgroundColor

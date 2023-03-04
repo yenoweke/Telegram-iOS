@@ -246,7 +246,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
         self.backButtonNode = HighlightableButtonNode()
         self.backButtonNode.alpha = 0.0
         
-        self.statusNode = ContestCallControllerStatusNode(weakNetworkText: presentationData.strings.Calls_ContestWeakNetwork)
+        self.statusNode = ContestCallControllerStatusNode(weakNetworkText: presentationData.strings.Calls_ContestWeakNetwork, light: !call.isVideo)
         
         self.gradientBackgroundNode = createGradientBackgroundNode(colors: initiatingGradients)
         self.gradientEffectView = makeVisualEffectForGradient()
@@ -404,8 +404,16 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                                 let fromFrame = strongSelf.buttonsNode.videoButtonFrame().flatMap({ frame in
                                     strongSelf.buttonsNode.view.convert(frame, to: strongSelf.view)
                                 })
-                                let controller = ContestVoiceChatCameraPreviewController(sharedContext: strongSelf.sharedContext, cameraNode: outgoingVideoNode, fromFrame: fromFrame, shareCamera: { _, _ in
-                                    proceed()
+                                
+                                let controller = ContestVoiceChatCameraPreviewController(sharedContext: strongSelf.sharedContext, cameraNode: outgoingVideoNode, fromFrame: fromFrame, shareCamera: { _, _, completion in
+                                    if strongSelf.incomingVideoNodeValue == nil {
+                                        Queue.mainQueue().after(0.2) {
+                                            proceed()
+                                        }
+                                    } else {
+                                        proceed()
+                                    }
+                                    completion(strongSelf.incomingVideoNodeValue == nil)
                                 }, switchCamera: { [weak self] in
                                     Queue.mainQueue().after(0.1) {
                                         self?.call.switchVideoCamera()
@@ -974,9 +982,11 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     
     private func showCallRating(_ callId: CallId, _ isVideo: Bool, transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .easeInOut)) {
         
+        transition.updateAlpha(layer: self.videoContainerNode.layer, alpha: 0.0)
+
         self.avatarNode.stopAnimating()
         
-        let node = ContestCallRatingNode(strings: self.presentationData.strings, light: !self.hasVideoNodes, dismiss: { [weak self] in
+        let node = ContestCallRatingNode(strings: self.presentationData.strings, light: true, dismiss: { [weak self] in
             self?.ratingDissmiss?()
         }, apply: { [weak self] rating in
             self?.ratingSelected?(RatingSelectedItem(rating: rating, isVideo: isVideo, callId: callId))
@@ -1327,6 +1337,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     private func updateBlurForSubnode() {
         self.keyPreviewNode?.updateAppearance(light: !self.hasVideoNodes)
         self.toastNode.light = !self.hasVideoNodes
+        self.statusNode.light = !self.hasVideoNodes
     }
     
     private func animateGradient() {
@@ -1706,7 +1717,6 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                 transition.updateAlpha(node: expandedVideoNode, alpha: 1.0)
             }
             
-            self.animateRequestedVideoOnce = false
             if self.animateRequestedVideoOnce {
                 self.animateRequestedVideoOnce = false
                 if expandedVideoNode === self.outgoingVideoNodeValue {
