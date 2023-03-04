@@ -90,6 +90,7 @@ public final class CallController: ViewController {
     private var audioOutputState: ([AudioSessionOutput], AudioSessionOutput?)?
     
     private let audioLevelDisposable = MetaDisposable()
+    private var applicationInFocusDisposable: Disposable?
     
     private let idleTimerExtensionDisposable = MetaDisposable()
     
@@ -151,6 +152,16 @@ public final class CallController: ViewController {
                 self?.controllerNode.startInteractiveUI()
             }
         }
+        
+        self.applicationInFocusDisposable = (accountContext.sharedContext.applicationBindings.applicationIsActive
+        |> distinctUntilChanged
+        |> deliverOn(Queue.mainQueue())).start(next: { [weak self] isActive in
+            if isActive {
+                self?.controllerNode.startInteractiveUI()
+            } else {
+                self?.controllerNode.stopInteractiveUI()
+            }
+        })
     }
     
     required public init(coder aDecoder: NSCoder) {
@@ -164,6 +175,7 @@ public final class CallController: ViewController {
         self.audioOutputStateDisposable?.dispose()
         self.idleTimerExtensionDisposable.dispose()
         self.audioLevelDisposable.dispose()
+        self.applicationInFocusDisposable?.dispose()
         if let proximityManagerIndex = self.proximityManagerIndex {
             DeviceProximityManager.shared().remove(proximityManagerIndex)
         }
@@ -176,8 +188,6 @@ public final class CallController: ViewController {
     }
     
     override public func loadDisplayNode() {
-        Logger.shared.logToConsole = true
-
         if self.call.useContestUI {
             self.displayNode = ContestCallControllerNode(accountContext: self.accountContext, sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
             //            self.displayNode = ContestCallContainerNode(presentationData: self.presentationData)

@@ -25,10 +25,6 @@ import ComponentFlow
 import AvatarNode
 import AnimatedAvatarSetNode
 
-func ddlog(_ what: @autoclosure () -> String) {
-    Logger.shared.log("ContestCalls", what())
-}
-
 private let defaultAudioLevel: Float = 0.45
 private let avatarSize: CGSize = CGSize(width: 136.0, height: 136.0)
 private let avatarFont = avatarPlaceholderFont(size: 48.0)

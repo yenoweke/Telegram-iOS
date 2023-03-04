@@ -266,7 +266,7 @@ private func makeEmojiView(_ animationFile: TelegramMediaFile?, context: Account
     if let animationFile = animationFile {
         let animationContent: EmojiStatusComponent.AnimationContent = .file(file: animationFile)
         let content: EmojiStatusComponent.Content = .animation(content: animationContent, size: size, placeholderColor: UIColor.white.withAlphaComponent(0.1), themeColor: nil, loopMode: .forever)
-        let iconSize = iconView.update(
+        let _ = iconView.update(
             transition: .immediate,
             component: AnyComponent(EmojiStatusComponent(
                 context: context,
@@ -279,7 +279,6 @@ private func makeEmojiView(_ animationFile: TelegramMediaFile?, context: Account
             environment: {},
             containerSize: size
         )
-        ddlog("iconSize iconSize \(iconSize)")
         iconView.isUserInteractionEnabled = false
         iconView.frame = CGRect(origin: .zero, size: size)
     }
