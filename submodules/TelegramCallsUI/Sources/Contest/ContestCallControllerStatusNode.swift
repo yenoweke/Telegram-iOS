@@ -393,13 +393,18 @@ final class ContestCallControllerStatusNode: ASDisplayNode {
         self.titleActivateAreaNode.frame = self.titleNode.frame
         self.statusActivateAreaNode.frame = self.statusContainerNode.frame
         
-        
         var receptionHeight = 0.0
         if (reception ?? 999) < 1 {
+            if transition.isAnimated, self.receptionTextStatusContainerNode.alpha < 0.9 {
+                let transition: ContainedViewLayoutTransition = .animated(duration: 0.4, curve: .customSpring(damping: 50.0, initialVelocity: 0))
+                transition.updateTransformScale(node: self.receptionTextStatusContainerNode, scale: 1.0)
+            }
             transition.updateAlpha(node: self.receptionTextStatusContainerNode, alpha: 1.0)
             receptionHeight = 12.0 + receptionContainerSize.height
+            
         } else {
             transition.updateAlpha(node: self.receptionTextStatusContainerNode, alpha: 0.0)
+            transition.updateTransformScale(node: self.receptionTextStatusContainerNode, scale: 0.6)
         }
         
         return titleLayout.size.height + spacing + statusLayout.size.height + receptionHeight

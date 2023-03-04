@@ -227,23 +227,24 @@ final class ContestCallControllerButtonsNode: ASDisplayNode, CallControllerButto
                     }
                 }
 
-                
+                var soundOutputAdded: Bool = false
                 if !isScreencastActive {
                     if isCameraActive {
                         topButtons.append(.switchCamera(isCameraActive && !isCameraInitializing))
                     } else {
+                        soundOutputAdded = true
                         topButtons.append(.soundOutput(soundOutput))
                     }
                 }
-                
+
                 topButtons.append(.enableCamera(isActive: isCameraActive || isScreencastActive, isEnabled: isCameraEnabled, isLoading: isCameraInitializing, isScreencast: isScreencastActive))
-                
-                if hasAudioRouteMenu && isCameraEnabled {
+
+                if hasAudioRouteMenu && isCameraEnabled && soundOutputAdded == false {
                     topButtons.append(.soundOutput(soundOutput))
                 } else {
                     topButtons.append(.mute(isMuted))
                 }
-                
+
                 topButtons.append(.end(.cancel))
                 
                 let topButtonsContentWidth = CGFloat(topButtons.count) * buttonSize

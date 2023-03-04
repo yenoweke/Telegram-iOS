@@ -604,7 +604,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
     }
     
     private func setupAudioOutputs() {
-        if self.outgoingVideoNodeValue != nil || self.incomingVideoNodeValue != nil || self.candidateOutgoingVideoNodeValue != nil || self.candidateIncomingVideoNodeValue != nil {
+        if self.outgoingVideoNodeValue != nil || self.candidateOutgoingVideoNodeValue != nil || self.candidateIncomingVideoNodeValue != nil {
             if let audioOutputState = self.audioOutputState, let currentOutput = audioOutputState.currentOutput {
                 switch currentOutput {
                 case .headphones, .speaker:
@@ -1759,10 +1759,8 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                         }
                     })
                 } else if transition.isAnimated {
-                    transition.updateCornerRadius(layer: removedExpandedVideoNodeValue.layer, cornerRadius: 60.0)
-                    var toPosition = removedExpandedVideoNodeValue.layer.position
-                    toPosition.y += removedExpandedVideoNodeValue.frame.height
-                    removedExpandedVideoNodeValue.layer.animatePosition(from: removedExpandedVideoNodeValue.layer.position, to: toPosition, duration: 0.3, removeOnCompletion: false)
+                    transition.updateCornerRadius(layer: removedExpandedVideoNodeValue.layer, cornerRadius: 44.0)
+                    removedExpandedVideoNodeValue.layer.animateScale(from: 1.0, to: 0.7, duration: 0.3, removeOnCompletion: false)
                     removedExpandedVideoNodeValue.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak removedExpandedVideoNodeValue] _ in
                         removedExpandedVideoNodeValue?.removeFromSupernode()
                     })
