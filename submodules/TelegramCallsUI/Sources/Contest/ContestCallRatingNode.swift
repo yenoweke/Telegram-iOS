@@ -446,7 +446,9 @@ final class ContestCallRatingNode: ASDisplayNode {
             if let rating = self.rating {
                 self.ratingDidApply = true
                 self.apply(rating)
-                self.playStickerAnimation(from: self.starNodes[index].frame)
+                if rating >= 4 {
+                    self.playStickerAnimation(from: self.starNodes[index].frame)
+                }
                 self.hapticFeedback.impact()
             }
         }

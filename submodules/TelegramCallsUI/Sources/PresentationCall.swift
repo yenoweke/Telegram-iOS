@@ -637,8 +637,8 @@ public final class PresentationCallImpl: PresentationCall {
         
         // TODO: remove if flag "useContestUI" unnecessary
         if self.useContestUI, let presentationCallState = presentationState?.state, case PresentationCallState.State.terminated(_, _, let reportRating) = presentationCallState {
-            self.didSetCanBeRemoved = true
             if reportRating {
+                self.didSetCanBeRemoved = true
                 self.needsToShowRating = true
                 self.canBeRemovedPromise.set((.single(true) |> delay(8.0, queue: Queue.mainQueue())))
             }
