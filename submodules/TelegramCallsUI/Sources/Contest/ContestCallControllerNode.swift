@@ -1760,7 +1760,7 @@ final class ContestCallControllerNode: ViewControllerTracingNode, CallController
                     })
                 } else if transition.isAnimated {
                     transition.updateCornerRadius(layer: removedExpandedVideoNodeValue.layer, cornerRadius: 44.0)
-                    removedExpandedVideoNodeValue.layer.animateScale(from: 1.0, to: 0.7, duration: 0.3, removeOnCompletion: false)
+                    removedExpandedVideoNodeValue.layer.animateScale(from: 1.0, to: 0.4, duration: 0.35, removeOnCompletion: false)
                     removedExpandedVideoNodeValue.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak removedExpandedVideoNodeValue] _ in
                         removedExpandedVideoNodeValue?.removeFromSupernode()
                     })

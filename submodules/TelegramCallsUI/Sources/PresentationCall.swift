@@ -95,6 +95,7 @@ public final class PresentationCallImpl: PresentationCall {
     
     private let debugInfoValue = Promise<(String, String)>(("", ""))
     
+    private var needsToShowRating = false
     private let canBeRemovedPromise = Promise<Bool>(false)
     private var didSetCanBeRemoved = false
     public var canBeRemoved: Signal<Bool, NoError> {
@@ -635,19 +636,22 @@ public final class PresentationCallImpl: PresentationCall {
         }
         
         // TODO: remove if flag "useContestUI" unnecessary
-        if self.useContestUI, !self.didSetCanBeRemoved, let presentationCallState = presentationState?.state, case PresentationCallState.State.terminated(_, _, let reportRating) = presentationCallState {
+        if self.useContestUI, let presentationCallState = presentationState?.state, case PresentationCallState.State.terminated(_, _, let reportRating) = presentationCallState {
             self.didSetCanBeRemoved = true
             if reportRating {
-                self.canBeRemovedPromise.set(.single(true) |> delay(8.0, queue: Queue.mainQueue()))
-            } else {
-                self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
+                self.needsToShowRating = true
+                self.canBeRemovedPromise.set((.single(true) |> delay(8.0, queue: Queue.mainQueue())))
             }
         }
         
         if terminating, !wasTerminated {
-            if !self.didSetCanBeRemoved, self.useContestUI == false {
+            if !self.didSetCanBeRemoved {
                 self.didSetCanBeRemoved = true
-                self.canBeRemovedPromise.set(.single(true) |> delay(2.0, queue: Queue.mainQueue()))
+                self.canBeRemovedPromise.set(
+                    .single(true)
+                    |> delay(2.5, queue: Queue.mainQueue())
+                    |> map({ _ in !self.needsToShowRating })
+                )
             }
             self.hungUpPromise.set(true)
             if sessionState.isOutgoing {
