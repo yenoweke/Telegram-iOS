@@ -181,7 +181,7 @@ final class ContestCallRatingNode: ASDisplayNode {
         
         self.contentNode = ASDisplayNode()
         self.contentNode.clipsToBounds = true
-        self.contentNode.cornerRadius = 20.0
+        self.contentNode.cornerRadius = buttonCornerRadius
     
         if #available(iOS 13.0, *) {
             self.contentNode.layer.cornerCurve = .continuous
