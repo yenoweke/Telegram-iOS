@@ -34,6 +34,7 @@ swift_library(
         "//submodules/Components/ComponentDisplayAdapters",
         "//submodules/TelegramUI/Components/TextNodeWithEntities",
         "//submodules/TelegramUI/Components/ListItemComponentAdaptor",
+        "//submodules/TelegramUI/Components/LiquidGlass",
     ],
     visibility = [
         "//visibility:public",

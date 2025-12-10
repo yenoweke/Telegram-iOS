@@ -6,6 +6,7 @@ import ComponentDisplayAdapters
 import UIKitRuntimeUtils
 import CoreImage
 import AppBundle
+import LiquidGlass
 
 private final class ContentContainer: UIView {
     private let maskContentView: UIView
@@ -302,18 +303,20 @@ public class GlassBackgroundView: UIView {
     }
     
     private let backgroundNode: NavigationBackgroundNode?
-    
+
     private let nativeView: UIVisualEffectView?
     private let nativeViewClippingContext: ClippingShapeContext?
     private let nativeParamsView: EffectSettingsContainerView?
-    
+
     private let foregroundView: UIImageView?
     private let shadowView: UIImageView?
-    
+
+    private var liquidGlassView: LiquidGlassView?
+
     private let maskContainerView: UIView
     public let maskContentView: UIView
     private let contentContainer: ContentContainer
-    
+
     private var innerBackgroundView: UIView?
     
     public var contentView: UIView {
@@ -325,52 +328,122 @@ public class GlassBackgroundView: UIView {
     }
     
     public private(set) var params: Params?
-        
+
+    public enum Mode {
+        case chat
+        case chatList
+    }
+
+    private var mode: Mode?
+
     public static var useCustomGlassImpl: Bool = false
-    
-    public override init(frame: CGRect) {
+
+    private struct Components {
+        let backgroundNode: NavigationBackgroundNode?
+        let nativeView: UIVisualEffectView?
+        let nativeViewClippingContext: ClippingShapeContext?
+        let nativeParamsView: EffectSettingsContainerView?
+        let foregroundView: UIImageView?
+        let shadowView: UIImageView?
+        let liquidGlassView: LiquidGlassView?
+        let maskContainerView: UIView
+        let maskContentView: UIView
+        let contentContainer: ContentContainer
+    }
+
+    private static func prepareComponents(mode: Mode?) -> Components {
+        let backgroundNode: NavigationBackgroundNode?
+        let nativeView: UIVisualEffectView?
+        let nativeViewClippingContext: ClippingShapeContext?
+        let nativeParamsView: EffectSettingsContainerView?
+        let foregroundView: UIImageView?
+        let shadowView: UIImageView?
+        let liquidGlassView: LiquidGlassView?
+
+        let useLiquidGlass = mode != nil
+
         if #available(iOS 26.0, *), !GlassBackgroundView.useCustomGlassImpl {
-            self.backgroundNode = nil
-            
+            backgroundNode = nil
+
             let glassEffect = UIGlassEffect(style: .regular)
             glassEffect.isInteractive = false
-            let nativeView = UIVisualEffectView(effect: glassEffect)
-            self.nativeViewClippingContext = ClippingShapeContext(view: nativeView)
-            self.nativeView = nativeView
-            
-            let nativeParamsView = EffectSettingsContainerView(frame: CGRect())
-            self.nativeParamsView = nativeParamsView
-            
-            nativeParamsView.addSubview(nativeView)
-            
-            self.foregroundView = nil
-            self.shadowView = nil
+            let nativeViewInstance = UIVisualEffectView(effect: glassEffect)
+            let clippingContext = ClippingShapeContext(view: nativeViewInstance)
+            nativeViewClippingContext = clippingContext
+            nativeView = nativeViewInstance
+
+            let nativeParamsViewInstance = EffectSettingsContainerView(frame: CGRect())
+            nativeParamsView = nativeParamsViewInstance
+
+            nativeParamsViewInstance.addSubview(nativeViewInstance)
+
+            foregroundView = nil
+            shadowView = nil
+            liquidGlassView = nil
+        } else if useLiquidGlass && LiquidGlassCapability.isDeviceSupported {
+            backgroundNode = nil
+            nativeView = nil
+            nativeViewClippingContext = nil
+            nativeParamsView = nil
+            foregroundView = nil
+            shadowView = nil
+
+            var config = LiquidGlassConfiguration()
+            config.blurRadius = 10.0
+            config.refThickness = 20.0
+            config.refFactor = 1.0
+            config.useReflection = true
+            config.shapePadding = CGPoint(x: 10.0, y: 10.0)
+            config.capturePadding = CGPoint(x: 0.0, y: 0.0)
+            config.cornerRadius = 20.0
+            config.glareFactor = 0.0
+            config.fresnelFactor = 0.1
+
+            let liquidGlass = LiquidGlassView(configuration: config)
+            liquidGlass.sourceView = nil
+            liquidGlassView = liquidGlass
         } else {
-            let backgroundNode = NavigationBackgroundNode(color: .black, enableBlur: true, customBlurRadius: 8.0)
-            self.backgroundNode = backgroundNode
-            self.nativeView = nil
-            self.nativeViewClippingContext = nil
-            self.nativeParamsView = nil
-            self.foregroundView = UIImageView()
-            
-            self.shadowView = UIImageView()
+            let backgroundNodeInstance = NavigationBackgroundNode(color: .black, enableBlur: true, customBlurRadius: 8.0)
+            backgroundNode = backgroundNodeInstance
+            nativeView = nil
+            nativeViewClippingContext = nil
+            nativeParamsView = nil
+            foregroundView = UIImageView()
+            shadowView = UIImageView()
+            liquidGlassView = nil
         }
-        
-        self.maskContainerView = UIView()
-        self.maskContainerView.backgroundColor = .white
+
+        let maskContainerView = UIView()
+        maskContainerView.backgroundColor = .white
         if let filter = CALayer.luminanceToAlpha() {
-            self.maskContainerView.layer.filters = [filter]
+            maskContainerView.layer.filters = [filter]
         }
-        
-        self.maskContentView = UIView()
-        self.maskContainerView.addSubview(self.maskContentView)
-        
-        self.contentContainer = ContentContainer(maskContentView: self.maskContentView)
-        
-        super.init(frame: frame)
-        
+
+        let maskContentView = UIView()
+        maskContainerView.addSubview(maskContentView)
+
+        let contentContainer = ContentContainer(maskContentView: maskContentView)
+
+        return Components(
+            backgroundNode: backgroundNode,
+            nativeView: nativeView,
+            nativeViewClippingContext: nativeViewClippingContext,
+            nativeParamsView: nativeParamsView,
+            foregroundView: foregroundView,
+            shadowView: shadowView,
+            liquidGlassView: liquidGlassView,
+            maskContainerView: maskContainerView,
+            maskContentView: maskContentView,
+            contentContainer: contentContainer
+        )
+    }
+
+    private func setupViewHierarchy() {
         if let shadowView = self.shadowView {
             self.addSubview(shadowView)
+        }
+        if let liquidGlassView = self.liquidGlassView {
+            self.addSubview(liquidGlassView)
         }
         if let nativeParamsView = self.nativeParamsView {
             self.addSubview(nativeParamsView)
@@ -384,7 +457,125 @@ public class GlassBackgroundView: UIView {
         }
         self.addSubview(self.contentContainer)
     }
-    
+
+    private func findChatControllerNodeView() -> UIView? {
+        var current = self.superview
+        while let view = current {
+            if String(describing: type(of: view)) == "ChatControllerNodeView" {
+                return view
+            }
+            current = view.superview
+        }
+        return nil
+    }
+
+    private func findListViewBackingView(in rootView: UIView) -> UIView? {
+        var queue: [UIView] = [rootView]
+
+        while !queue.isEmpty {
+            let view = queue.removeFirst()
+
+            if String(describing: type(of: view)) == "ListViewBackingView" {
+                return view.superview?.superview
+            }
+
+            queue.append(contentsOf: view.subviews)
+        }
+
+        return nil
+    }
+
+    private func findViewByClassName(_ className: String, in rootView: UIView) -> UIView? {
+        var queue: [UIView] = [rootView]
+
+        while !queue.isEmpty {
+            let view = queue.removeFirst()
+
+            if String(describing: type(of: view)) == className {
+                return view
+            }
+
+            queue.append(contentsOf: view.subviews)
+        }
+
+        return nil
+    }
+
+    private func configureSourceView(for liquidGlassView: LiquidGlassView) {
+        guard liquidGlassView.sourceView == nil, let mode = self.mode else {
+            return
+        }
+
+        switch mode {
+        case .chat:
+            if let chatControllerNodeView = self.findChatControllerNodeView() {
+                if let listViewBackingViewParent = self.findListViewBackingView(in: chatControllerNodeView) {
+                    liquidGlassView.sourceView = listViewBackingViewParent
+                    liquidGlassView.continuousUpdate = true
+                } else {
+                    liquidGlassView.sourceView = self.superview
+                }
+            }
+        case .chatList:
+            if let window = self.window {
+                if let tracingLayerView = self.findViewByClassName("UITracingLayerView", in: window) {
+                    liquidGlassView.sourceView = tracingLayerView
+                    liquidGlassView.continuousUpdate = true
+                }
+            }
+        }
+    }
+
+    public func setSourceView(_ view: UIView?) {
+        guard let liquidGlassView = self.liquidGlassView else {
+            return
+        }
+        liquidGlassView.sourceView = view
+        if view != nil {
+            liquidGlassView.continuousUpdate = true
+        }
+    }
+
+    public override init(frame: CGRect) {
+        let components = GlassBackgroundView.prepareComponents(mode: nil)
+
+        self.backgroundNode = components.backgroundNode
+        self.nativeView = components.nativeView
+        self.nativeViewClippingContext = components.nativeViewClippingContext
+        self.nativeParamsView = components.nativeParamsView
+        self.foregroundView = components.foregroundView
+        self.shadowView = components.shadowView
+        self.liquidGlassView = components.liquidGlassView
+        self.maskContainerView = components.maskContainerView
+        self.maskContentView = components.maskContentView
+        self.contentContainer = components.contentContainer
+        self.mode = nil
+
+        super.init(frame: frame)
+
+        self.setupViewHierarchy()
+    }
+
+    public init(frame: CGRect, mode: Mode) {
+        let components = GlassBackgroundView.prepareComponents(mode: mode)
+
+        self.backgroundNode = components.backgroundNode
+        self.nativeView = components.nativeView
+        self.nativeViewClippingContext = components.nativeViewClippingContext
+        self.nativeParamsView = components.nativeParamsView
+        self.foregroundView = components.foregroundView
+        self.shadowView = components.shadowView
+        self.liquidGlassView = components.liquidGlassView
+        self.maskContainerView = components.maskContainerView
+        self.maskContentView = components.maskContentView
+        self.contentContainer = components.contentContainer
+        self.mode = mode
+
+        super.init(frame: frame)
+
+        self.setupViewHierarchy()
+    }
+
     required public init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -408,7 +599,7 @@ public class GlassBackgroundView: UIView {
     
     public func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, transition: ComponentTransition) {
         if let nativeView = self.nativeView, let nativeViewClippingContext = self.nativeViewClippingContext, (nativeView.bounds.size != size || nativeViewClippingContext.shape != shape) {
-            
+
             nativeViewClippingContext.update(shape: shape, size: size, transition: transition)
             if transition.animation.isImmediate {
                 nativeView.frame = CGRect(origin: CGPoint(), size: size)
@@ -417,6 +608,34 @@ public class GlassBackgroundView: UIView {
                 transition.setFrame(view: nativeView, frame: nativeFrame)
             }
         }
+
+        if let liquidGlassView = self.liquidGlassView {
+            self.configureSourceView(for: liquidGlassView)
+
+            let cornerRadius: CGFloat
+            switch shape {
+            case let .roundedRect(radius):
+                cornerRadius = radius
+            }
+
+            var config = liquidGlassView.configuration
+            config.cornerRadius = cornerRadius
+            config.tint = tintColor.color.withAlphaComponent(1.0)
+
+            liquidGlassView.configuration = config
+
+            let frame = CGRect(origin: CGPoint(), size: size)
+            if transition.animation.isImmediate {
+                liquidGlassView.frame = frame
+            } else {
+                transition.setFrame(view: liquidGlassView, frame: frame)
+            }
+
+            liquidGlassView.isHidden = false
+
+            liquidGlassView.invalidateBackground()
+        }
+
         if let backgroundNode = self.backgroundNode {
             backgroundNode.updateColor(color: .clear, forceKeepBlur: tintColor.color.alpha != 1.0, transition: transition.containedViewLayoutTransition)
             
@@ -428,44 +647,46 @@ public class GlassBackgroundView: UIView {
         }
         
         let shadowInset: CGFloat = 32.0
-        
-        if let innerColor = tintColor.innerColor {
-            let innerBackgroundFrame = CGRect(origin: CGPoint(), size: size).insetBy(dx: 3.0, dy: 3.0)
-            let innerBackgroundRadius = min(innerBackgroundFrame.width, innerBackgroundFrame.height) * 0.5
-            
-            let innerBackgroundView: UIView
-            var innerBackgroundTransition = transition
-            var animateIn = false
-            if let current = self.innerBackgroundView {
-                innerBackgroundView = current
-            } else {
-                innerBackgroundView = UIView()
-                innerBackgroundTransition = innerBackgroundTransition.withAnimation(.none)
-                self.innerBackgroundView = innerBackgroundView
-                self.contentView.insertSubview(innerBackgroundView, at: 0)
-                
-                innerBackgroundView.frame = innerBackgroundFrame
-                innerBackgroundView.layer.cornerRadius = innerBackgroundRadius
-                animateIn = true
+
+        if self.liquidGlassView == nil {
+            if let innerColor = tintColor.innerColor {
+                let innerBackgroundFrame = CGRect(origin: CGPoint(), size: size).insetBy(dx: 3.0, dy: 3.0)
+                let innerBackgroundRadius = min(innerBackgroundFrame.width, innerBackgroundFrame.height) * 0.5
+
+                let innerBackgroundView: UIView
+                var innerBackgroundTransition = transition
+                var animateIn = false
+                if let current = self.innerBackgroundView {
+                    innerBackgroundView = current
+                } else {
+                    innerBackgroundView = UIView()
+                    innerBackgroundTransition = innerBackgroundTransition.withAnimation(.none)
+                    self.innerBackgroundView = innerBackgroundView
+                    self.contentView.insertSubview(innerBackgroundView, at: 0)
+
+                    innerBackgroundView.frame = innerBackgroundFrame
+                    innerBackgroundView.layer.cornerRadius = innerBackgroundRadius
+                    animateIn = true
+                }
+
+                innerBackgroundView.backgroundColor = innerColor
+                innerBackgroundTransition.setFrame(view: innerBackgroundView, frame: innerBackgroundFrame)
+                innerBackgroundTransition.setCornerRadius(layer: innerBackgroundView.layer, cornerRadius: innerBackgroundRadius)
+
+                if animateIn {
+                    transition.animateAlpha(view: innerBackgroundView, from: 0.0, to: 1.0)
+                    transition.animateScale(view: innerBackgroundView, from: 0.001, to: 1.0)
+                }
+            } else if let innerBackgroundView = self.innerBackgroundView {
+                self.innerBackgroundView = nil
+
+                transition.setAlpha(view: innerBackgroundView, alpha: 0.0, completion: { [weak innerBackgroundView] _ in
+                    innerBackgroundView?.removeFromSuperview()
+                })
+                transition.setScale(view: innerBackgroundView, scale: 0.001)
+
+                innerBackgroundView.removeFromSuperview()
             }
-            
-            innerBackgroundView.backgroundColor = innerColor
-            innerBackgroundTransition.setFrame(view: innerBackgroundView, frame: innerBackgroundFrame)
-            innerBackgroundTransition.setCornerRadius(layer: innerBackgroundView.layer, cornerRadius: innerBackgroundRadius)
-            
-            if animateIn {
-                transition.animateAlpha(view: innerBackgroundView, from: 0.0, to: 1.0)
-                transition.animateScale(view: innerBackgroundView, from: 0.001, to: 1.0)
-            }
-        } else if let innerBackgroundView = self.innerBackgroundView {
-            self.innerBackgroundView = nil
-            
-            transition.setAlpha(view: innerBackgroundView, alpha: 0.0, completion: { [weak innerBackgroundView] _ in
-                innerBackgroundView?.removeFromSuperview()
-            })
-            transition.setScale(view: innerBackgroundView, scale: 0.001)
-            
-            innerBackgroundView.removeFromSuperview()
         }
         
         let params = Params(shape: shape, isDark: isDark, tintColor: tintColor, isInteractive: isInteractive)
@@ -539,8 +760,256 @@ public class GlassBackgroundView: UIView {
     }
 }
 
+// MARK: - Touch Tracking Gesture Recognizer
+
+private final class TouchTrackingGestureRecognizer: UIGestureRecognizer, UIGestureRecognizerDelegate {
+    var onTouchBegan: ((CGPoint) -> Void)?
+    var onTouchMoved: ((CGPoint) -> Void)?
+    var onTouchEnded: (() -> Void)?
+
+    private(set) var initialPosition: CGPoint = .zero
+
+    override init(target: Any?, action: Selector?) {
+        super.init(target: target, action: action)
+        self.cancelsTouchesInView = false
+        self.delaysTouchesBegan = false
+        self.delaysTouchesEnded = false
+        self.delegate = self
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard let touch = touches.first, let view = self.view else { return }
+
+        self.state = .began
+        self.initialPosition = touch.location(in: view.superview)
+        self.onTouchBegan?(self.initialPosition)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard let touch = touches.first, let view = self.view else { return }
+
+        self.state = .changed
+        let currentPosition = touch.location(in: view.superview)
+        self.onTouchMoved?(currentPosition)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        self.state = .ended
+        self.onTouchEnded?()
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        self.state = .cancelled
+        self.onTouchEnded?()
+    }
+
+    override func reset() {
+        super.reset()
+        self.initialPosition = .zero
+    }
+}
+
+// MARK: - Legacy Glass Morphing Controller
+
+private final class LegacyGlassMorphingController {
+    private weak var targetView: UIView?
+    private var gestureRecognizer: TouchTrackingGestureRecognizer?
+
+    private var initialTouchPoint: CGPoint = .zero
+    private var isAnimatingBack: Bool = false
+    private var isTouching: Bool = false
+
+    // Configuration
+    private let maxStretchFactor: CGFloat = 0.3
+    private let stretchDistance: CGFloat = 700.0
+    private let compressionRatio: CGFloat = 0.24
+
+    // Touch scale effect
+    private let touchScaleFactor: CGFloat
+    private let touchScaleAnimationDuration: CGFloat = 0.15
+    private let isMorphEnabled: Bool
+
+    init(targetView: UIView, touchScaleFactor: CGFloat, isMorphEnabled: Bool = false) {
+        self.targetView = targetView
+        self.touchScaleFactor = touchScaleFactor
+        self.isMorphEnabled = isMorphEnabled
+        self.setupGestureRecognizer()
+    }
+
+    deinit {
+        self.detach()
+    }
+
+    private func setupGestureRecognizer() {
+        let gesture = TouchTrackingGestureRecognizer(target: nil, action: nil)
+        gesture.onTouchBegan = { [weak self] point in
+            self?.handleTouchBegan(at: point)
+        }
+        gesture.onTouchMoved = { [weak self] point in
+            self?.handleTouchMoved(to: point)
+        }
+        gesture.onTouchEnded = { [weak self] in
+            self?.handleTouchEnded()
+        }
+        self.targetView?.addGestureRecognizer(gesture)
+        self.gestureRecognizer = gesture
+    }
+
+    private func handleTouchBegan(at point: CGPoint) {
+        guard let view = self.targetView else { return }
+
+        if self.isAnimatingBack {
+            view.layer.removeAllAnimations()
+            self.isAnimatingBack = false
+        }
+
+        self.initialTouchPoint = point
+        self.isTouching = true
+
+        // Scale up animation on touch
+        UIView.animate(
+            withDuration: self.touchScaleAnimationDuration,
+            delay: 0,
+            options: [.curveEaseOut, .allowUserInteraction],
+            animations: {
+                view.layer.transform = CATransform3DMakeScale(self.touchScaleFactor, self.touchScaleFactor, 1.0)
+            }
+        )
+    }
+
+    private func handleTouchMoved(to point: CGPoint) {
+        guard let view = self.targetView else { return }
+
+        // If morph disabled, just keep the touch scale
+        guard self.isMorphEnabled else { return }
+
+        let delta = CGPoint(
+            x: point.x - self.initialTouchPoint.x,
+            y: point.y - self.initialTouchPoint.y
+        )
+
+        let distance = sqrt(delta.x * delta.x + delta.y * delta.y)
+
+        guard distance > 1.0 else {
+            // Keep the touch scale when not dragging
+            view.layer.transform = CATransform3DMakeScale(self.touchScaleFactor, self.touchScaleFactor, 1.0)
+            self.setAnchorPointPreservingPosition(CGPoint(x: 0.5, y: 0.5), for: view)
+            return
+        }
+
+        // Normalized direction of pull
+        let dirX = delta.x / distance
+        let dirY = delta.y / distance
+
+        // Anchor point is opposite to pull direction
+        let anchorX = 0.5 - dirX * 0.5
+        let anchorY = 0.5 - dirY * 0.5
+        let newAnchor = CGPoint(x: anchorX, y: anchorY)
+
+        self.setAnchorPointPreservingPosition(newAnchor, for: view)
+
+        // Calculate stretch based on distance
+        let stretchAmount = min(distance / self.stretchDistance, 1.0) * self.maxStretchFactor
+
+        // Stretch more in the direction of pull
+        let absX = abs(dirX)
+        let absY = abs(dirY)
+
+        // Base scale + directional stretch with compression
+        let stretchX = self.touchScaleFactor + stretchAmount * absX - stretchAmount * absY * self.compressionRatio
+        let stretchY = self.touchScaleFactor + stretchAmount * absY - stretchAmount * absX * self.compressionRatio
+
+        view.layer.transform = CATransform3DMakeScale(stretchX, stretchY, 1.0)
+    }
+
+    private func handleTouchEnded() {
+        guard let view = self.targetView else { return }
+
+        self.isTouching = false
+        self.isAnimatingBack = true
+
+        UIView.animate(
+            withDuration: 0.6,
+            delay: 0,
+            usingSpringWithDamping: 0.5,
+            initialSpringVelocity: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState],
+            animations: {
+                view.layer.transform = CATransform3DIdentity
+            },
+            completion: { [weak self] finished in
+                guard let self = self, finished else { return }
+                self.isAnimatingBack = false
+                if let view = self.targetView {
+                    self.setAnchorPointPreservingPosition(CGPoint(x: 0.5, y: 0.5), for: view)
+                }
+            }
+        )
+    }
+
+    private func setAnchorPointPreservingPosition(_ newAnchor: CGPoint, for view: UIView) {
+        let oldAnchor = view.layer.anchorPoint
+        if oldAnchor == newAnchor { return }
+
+        let bounds = view.bounds
+        let oldPosition = view.layer.position
+
+        let newPosition = CGPoint(
+            x: oldPosition.x + (newAnchor.x - oldAnchor.x) * bounds.width,
+            y: oldPosition.y + (newAnchor.y - oldAnchor.y) * bounds.height
+        )
+
+        view.layer.anchorPoint = newAnchor
+        view.layer.position = newPosition
+    }
+
+    func detach() {
+        if let gesture = self.gestureRecognizer, let view = gesture.view {
+            view.removeGestureRecognizer(gesture)
+        }
+        self.gestureRecognizer = nil
+        if let view = self.targetView {
+            view.layer.removeAllAnimations()
+            view.layer.transform = CATransform3DIdentity
+            self.setAnchorPointPreservingPosition(CGPoint(x: 0.5, y: 0.5), for: view)
+        }
+    }
+}
+
+// MARK: - Glass Background Container View
+
 public final class GlassBackgroundContainerView: UIView {
     private final class ContentView: UIView {
+        fileprivate var morphingControllers: [UIView: LegacyGlassMorphingController] = [:]
+
+        override func willRemoveSubview(_ subview: UIView) {
+            super.willRemoveSubview(subview)
+            if let controller = self.morphingControllers.removeValue(forKey: subview) {
+                controller.detach()
+            }
+        }
+
+        func setTouchScale(for view: UIView, scale: CGFloat, isMorphEnabled: Bool = false) {
+            if let existingController = self.morphingControllers[view] {
+                existingController.detach()
+            }
+            let controller = LegacyGlassMorphingController(targetView: view, touchScaleFactor: scale, isMorphEnabled: isMorphEnabled)
+            self.morphingControllers[view] = controller
+        }
+
+        func removeTouchScale(for view: UIView) {
+            if let controller = self.morphingControllers.removeValue(forKey: view) {
+                controller.detach()
+            }
+        }
     }
     
     private let legacyView: ContentView?
@@ -554,7 +1023,15 @@ public final class GlassBackgroundContainerView: UIView {
             return self.legacyView!
         }
     }
-    
+
+    public func setTouchScale(to view: UIView, scale: CGFloat, isMorphEnabled: Bool = false) {
+        self.legacyView?.setTouchScale(for: view, scale: scale, isMorphEnabled: isMorphEnabled)
+    }
+
+    public func removeTouchScale(from view: UIView) {
+        self.legacyView?.removeTouchScale(for: view)
+    }
+
     public override init(frame: CGRect) {
         if #available(iOS 26.0, *) {
             let effect = UIGlassContainerEffect()
