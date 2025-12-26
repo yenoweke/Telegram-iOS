@@ -629,8 +629,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         
         self.glassBackgroundContainer = GlassBackgroundContainerView()
         
-        self.textInputContainerBackgroundView = GlassBackgroundView(frame: CGRect())
-        
+        self.textInputContainerBackgroundView = GlassBackgroundView(frame: CGRect(), mode: .chat)
+
         self.accessoryPanelContainer = UIView()
         self.accessoryPanelContainer.clipsToBounds = true
         
@@ -688,7 +688,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.attachmentButton.accessibilityTraits = [.button]
         self.attachmentButton.isAccessibilityElement = true
         
-        self.attachmentButtonBackground = GlassBackgroundView(frame: CGRect())
+        self.attachmentButtonBackground = GlassBackgroundView(frame: CGRect(), mode: .chat)
         self.attachmentButtonBackground.contentView.addSubview(self.attachmentButton)
         
         self.attachmentButtonIcon = GlassBackgroundView.ContentImageView()
@@ -939,6 +939,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         
         self.glassBackgroundContainer.contentView.addSubview(self.menuButton.view)
         self.glassBackgroundContainer.contentView.addSubview(self.attachmentButtonBackground)
+        self.glassBackgroundContainer.setTouchScale(to: self.attachmentButtonBackground, scale: 1.3, isMorphEnabled: true)
         self.glassBackgroundContainer.contentView.addSubview(self.attachmentButtonDisabledNode.view)
         
         self.glassBackgroundContainer.contentView.addSubview(self.startButton.view)

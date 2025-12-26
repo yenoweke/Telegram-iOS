@@ -7,6 +7,7 @@ import TelegramPresentationData
 import SwitchNode
 import AppBundle
 import ComponentFlow
+import LiquidGlass
 
 public enum ItemListSwitchItemNodeType {
     case regular
@@ -145,6 +146,17 @@ extension SwitchNode: ItemListSwitchNodeImpl {
 extension IconSwitchNode: ItemListSwitchNodeImpl {
 }
 
+extension LiquidGlassSwitchNode: ItemListSwitchNodeImpl {
+    var positiveContentColor: UIColor {
+        get { return .white }
+        set { }
+    }
+    var negativeContentColor: UIColor {
+        get { return .white }
+        set { }
+    }
+}
+
 public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
     private let backgroundNode: ASDisplayNode
     private let topStripeNode: ASDisplayNode
@@ -195,7 +207,7 @@ public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
         
         switch type {
             case .regular:
-                self.switchNode = SwitchNode()
+                self.switchNode = LiquidGlassSwitchNode()
             case .icon:
                 self.switchNode = IconSwitchNode()
         }
@@ -229,8 +241,15 @@ public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
     
     override public func didLoad() {
         super.didLoad()
-        
-        (self.switchNode.view as? UISwitch)?.addTarget(self, action: #selector(self.switchValueChanged(_:)), for: .valueChanged)
+
+        if let switchView = self.switchNode.view as? UISwitch {
+            switchView.addTarget(self, action: #selector(self.switchValueChanged(_:)), for: .valueChanged)
+        } else if let liquidGlassSwitch = self.switchNode as? LiquidGlassSwitchNode {
+            liquidGlassSwitch.valueUpdated = { [weak self] value in
+                guard let self, let item = self.item else { return }
+                item.updated(value)
+            }
+        }
         self.switchGestureNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tapGesture(_:))))
     }
     
@@ -498,19 +517,24 @@ public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
                         }
                     }
                     
-                    if let switchView = strongSelf.switchNode.view as? UISwitch {
-                        if strongSelf.switchNode.bounds.size.width.isZero {
+                    let switchSize: CGSize
+                    if strongSelf.switchNode.bounds.size.width.isZero {
+                        if let switchView = strongSelf.switchNode.view as? UISwitch {
                             switchView.sizeToFit()
+                            switchSize = switchView.bounds.size
+                        } else {
+                            switchSize = strongSelf.switchNode.calculateSizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
                         }
-                        let switchSize = switchView.bounds.size
-                        
-                        transition.updateFrame(node: strongSelf.switchNode, frame: CGRect(origin: CGPoint(x: params.width - params.rightInset - switchSize.width - 15.0, y: floor((contentSize.height - switchSize.height) / 2.0)), size: switchSize))
-                        strongSelf.switchGestureNode.frame = strongSelf.switchNode.frame
-                        if switchView.isOn != item.value {
-                            switchView.setOn(item.value, animated: animated)
-                        }
-                        switchView.isUserInteractionEnabled = item.enableInteractiveChanges
+                    } else {
+                        switchSize = strongSelf.switchNode.bounds.size
                     }
+
+                    transition.updateFrame(node: strongSelf.switchNode, frame: CGRect(origin: CGPoint(x: params.width - params.rightInset - switchSize.width - 15.0, y: floor((contentSize.height - switchSize.height) / 2.0)), size: switchSize))
+                    strongSelf.switchGestureNode.frame = strongSelf.switchNode.frame
+                    if strongSelf.switchNode.isOn != item.value {
+                        strongSelf.switchNode.setOn(item.value, animated: animated)
+                    }
+                    strongSelf.switchNode.view.isUserInteractionEnabled = item.enableInteractiveChanges
                     strongSelf.switchGestureNode.isHidden = item.enableInteractiveChanges && item.enabled
                     
                     if item.displayLocked {
@@ -599,7 +623,7 @@ public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
         if let switchNode = self.switchNode as? IconSwitchNode {
             switchNode.isOn = !switchNode.isOn
             item.updated(switchNode.isOn)
-        } else if let switchNode = self.switchNode as? SwitchNode {
+        } else if let switchNode = self.switchNode as? LiquidGlassSwitchNode {
             switchNode.isOn = !switchNode.isOn
             item.updated(switchNode.isOn)
         }
@@ -664,9 +688,9 @@ public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
     }
     
     @objc private func tapGesture(_ recognizer: UITapGestureRecognizer) {
-        if let item = self.item, let switchView = self.switchNode.view as? UISwitch, case .ended = recognizer.state {
+        if let item = self.item, case .ended = recognizer.state {
             if item.enabled && !item.displayLocked {
-                let value = switchView.isOn
+                let value = self.switchNode.isOn
                 item.updated(!value)
             } else {
                 item.activatedWhileDisabled()

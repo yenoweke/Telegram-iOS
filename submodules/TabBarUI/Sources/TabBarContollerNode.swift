@@ -6,6 +6,8 @@ import TelegramPresentationData
 import ComponentFlow
 import ComponentDisplayAdapters
 import TabBarComponent
+import GlassBackgroundComponent
+import LiquidGlass
 
 private extension ToolbarTheme {
     convenience init(theme: PresentationTheme) {
@@ -65,7 +67,11 @@ final class TabBarControllerNode: ASDisplayNode {
     private(set) var selectedIndex: Int = 0
 
     private(set) var currentControllerNode: ASDisplayNode?
-    
+    private let contentContainerNode: ASDisplayNode
+
+    private var liquidGlassView: LiquidGlassView?
+    private var liquidGlassMorphAnimator: LiquidGlassMorphAnimator?
+
     private var layoutResult: LayoutResult?
     private var isUpdateRequested: Bool = false
     private var isChangingSelectedIndex: Bool = false
@@ -74,20 +80,24 @@ final class TabBarControllerNode: ASDisplayNode {
         guard node !== self.currentControllerNode else {
             return {}
         }
-        
+
         let previousNode = self.currentControllerNode
         self.currentControllerNode = node
         if let currentControllerNode = self.currentControllerNode {
             if let previousNode {
-                self.insertSubnode(currentControllerNode, aboveSubnode: previousNode)
+                self.contentContainerNode.insertSubnode(currentControllerNode, aboveSubnode: previousNode)
             } else {
-                self.insertSubnode(currentControllerNode, at: 0)
+                self.contentContainerNode.insertSubnode(currentControllerNode, at: 0)
             }
             if let tabBarView = self.tabBarView.view {
-                self.view.bringSubviewToFront(tabBarView)
+                self.contentContainerNode.view.bringSubviewToFront(tabBarView)
             }
         }
-        
+
+        if let tabBarView = self.tabBarView.view as? TabBarComponent.View {
+            tabBarView.setGlassSourceView(node?.view)
+        }
+
         return { [weak self, weak previousNode] in
             if previousNode !== self?.currentControllerNode {
                 previousNode?.removeFromSupernode()
@@ -104,7 +114,8 @@ final class TabBarControllerNode: ASDisplayNode {
         self.disabledOverlayNode.alpha = 0.0
         self.toolbarActionSelected = toolbarActionSelected
         self.disabledPressed = disabledPressed
-        
+        self.contentContainerNode = ASDisplayNode()
+
         super.init()
         
         self.setViewBlock({
@@ -124,17 +135,19 @@ final class TabBarControllerNode: ASDisplayNode {
         }
         
         self.backgroundColor = theme.list.plainBackgroundColor
-        
+
+        self.addSubnode(self.contentContainerNode)
+
         //self.addSubnode(self.tabBarNode)
         //self.addSubnode(self.disabledOverlayNode)
     }
     
     override func didLoad() {
         super.didLoad()
-        
+
         self.disabledOverlayNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.disabledTapGesture(_:))))
     }
-    
+
     @objc private func disabledTapGesture(_ recognizer: UITapGestureRecognizer) {
         if case .ended = recognizer.state {
             self.disabledPressed()
@@ -144,14 +157,77 @@ final class TabBarControllerNode: ASDisplayNode {
     func updateTheme(_ theme: PresentationTheme) {
         self.theme = theme
         self.backgroundColor = theme.list.plainBackgroundColor
-        
+
         self.disabledOverlayNode.backgroundColor = theme.rootController.tabBar.backgroundColor.withAlphaComponent(0.5)
         self.toolbarNode?.updateTheme(ToolbarTheme(theme: theme))
+
         self.requestUpdate()
     }
     
     func updateIsTabBarEnabled(_ value: Bool, transition: ContainedViewLayoutTransition) {
         transition.updateAlpha(node: self.disabledOverlayNode, alpha: value ? 0.0 : 1.0)
+    }
+
+    // MARK: - LiquidGlass Management
+
+    private func setupLiquidGlassIfNeeded() {
+        guard self.liquidGlassView == nil else { return }
+
+        var config = LiquidGlassConfiguration()
+        config.capturePadding = CGPoint(x: 9.0, y: 9.0)
+        config.shapePadding = CGPoint(x: 15.0, y: 15.0)
+        config.captureMethod = LiquidGlassCapability.isDeviceSupported ? .drawHierarchy : .ioSurface
+        let liquidGlass = LiquidGlassView(configuration: config)
+        liquidGlass.sourceView = self.view
+
+        liquidGlass.isHidden = true
+        self.view.superview?.addSubview(liquidGlass)
+        self.liquidGlassView = liquidGlass
+
+        let morphAnimator = LiquidGlassMorphAnimator()
+        morphAnimator.onMorphScaleChanged = { [weak liquidGlass] scale in
+            liquidGlass?.setMorphScale(scale)
+        }
+        self.liquidGlassMorphAnimator = morphAnimator
+    }
+
+    func updateLiquidGlass(frame: CGRect?, from sourceView: UIView, visible: Bool, continuousUpdate: Bool, velocity: CGPoint) {
+        if visible && self.liquidGlassView == nil {
+            setupLiquidGlassIfNeeded()
+        }
+
+        guard let liquidGlass = self.liquidGlassView else { return }
+
+        if let frame = frame {
+            let frameInSelf = sourceView.convert(frame, to: self.view)
+            liquidGlass.frame = frameInSelf
+            liquidGlass.configuration.cornerRadius = frame.height / 2.0
+        }
+
+        if visible && liquidGlass.isHidden {
+            liquidGlass.alpha = 0
+            liquidGlass.isHidden = false
+            let transition = ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut)
+            transition.updateAlpha(layer: liquidGlass.layer, alpha: 1.0)
+            self.liquidGlassMorphAnimator?.start()
+        }
+
+        self.liquidGlassMorphAnimator?.feedVelocity(velocity)
+        liquidGlass.continuousUpdate = continuousUpdate
+    }
+
+    func hideLiquidGlass() {
+        guard let liquidGlass = self.liquidGlassView else { return }
+
+        self.liquidGlassMorphAnimator?.stop()
+        self.liquidGlassView = nil
+
+        let transition = ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut)
+        transition.updateAlpha(layer: liquidGlass.layer, alpha: 0.0, completion: { [weak self] _ in
+            self?.liquidGlassMorphAnimator = nil
+            liquidGlass.pauseRendering()
+            liquidGlass.removeFromSuperview()
+        })
     }
     
     var tabBarHidden = false {
@@ -179,6 +255,8 @@ final class TabBarControllerNode: ASDisplayNode {
     }
     
     private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {
+        transition.updateFrame(node: self.contentContainerNode, frame: CGRect(origin: .zero, size: params.layout.size))
+
         var options: ContainerViewLayoutInsetOptions = []
         if params.layout.metrics.widthClass == .regular {
             options.insert(.input)
@@ -240,7 +318,16 @@ final class TabBarControllerNode: ASDisplayNode {
         
         if let tabBarComponentView = self.tabBarView.view {
             if tabBarComponentView.superview == nil {
-                self.view.addSubview(tabBarComponentView)
+                self.contentContainerNode.view.addSubview(tabBarComponentView)
+            }
+            if let tabBarView = tabBarComponentView as? TabBarComponent.View {
+                tabBarView.onLiquidGlassUpdate = { [weak self, weak tabBarView] frame, visible, continuousUpdate, velocity in
+                    guard let self, let tabBarView else { return }
+                    self.updateLiquidGlass(frame: frame, from: tabBarView, visible: visible, continuousUpdate: continuousUpdate, velocity: velocity)
+                }
+                tabBarView.onLiquidGlassHide = { [weak self] in
+                    self?.hideLiquidGlass()
+                }
             }
             transition.updateFrame(view: tabBarComponentView, frame: tabBarFrame)
             transition.updateAlpha(layer: tabBarComponentView.layer, alpha: params.toolbar == nil ? 1.0 : 0.0)
@@ -277,7 +364,7 @@ final class TabBarControllerNode: ASDisplayNode {
                 toolbarNode?.removeFromSupernode()
             })
         }
-        
+
         return params.layout.size.height - tabBarFrame.minY
     }
     
